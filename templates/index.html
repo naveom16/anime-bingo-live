@@ -2,616 +2,104 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Bingo - Real-time</title>
+    <title>Anime Bingo Matrix</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root { --primary: #a55eea; --dark: #0f0f1e; --cell: #1e1e2f; }
+        body { font-family: sans-serif; background: var(--dark); color: white; text-align: center; }
+        
+        /* ตารางแบบ Matrix 5x5 + หัวข้อ Row/Col */
+        .bingo-grid { 
+            display: grid; 
+            grid-template-columns: 100px repeat(5, 120px); /* 1 ช่องหัวแถว + 5 ช่องเนื้อหา */
+            gap: 5px; 
+            margin: 20px auto; 
+            width: fit-content; 
+        }
+        
+        .cell { 
+            width: 120px; height: 120px; background: var(--cell); 
+            border: 1px solid #333; display: flex; align-items: center; 
+            justify-content: center; position: relative; border-radius: 8px;
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
-            color: #fff;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            text-align: center;
-        }
-
-        .main-layout {
-            display: flex;
-            gap: 20px;
-            align-items: flex-start;
-        }
-
-        .bingo-section {
-            flex: 1;
-        }
-
-        .search-section {
-            width: 300px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            padding: 15px;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .controls {
-            margin-bottom: 20px;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            font-size: 1rem;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 5px;
-        }
-
-        .btn-start {
-            background: linear-gradient(90deg, #ff6b6b, #ee5a24);
-            color: white;
-        }
-
-        .btn-start:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
-        }
-
-        .btn-reset {
-            background: linear-gradient(90deg, #48dbfb, #0abde3);
-            color: white;
-        }
-
-        .btn-reset:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 20px rgba(72, 219, 251, 0.5);
-        }
-
-        .btn-search {
-            background: linear-gradient(90deg, #a55eea, #8854d0);
-            color: white;
-        }
-
-        .btn-search:hover {
-            transform: scale(1.05);
-        }
-
-        .bingo-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 10px;
-            max-width: 700px;
-            margin: 0 auto;
-        }
-
-        .bingo-cell {
-            aspect-ratio: 1;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 10px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 5px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-            word-wrap: break-word;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .bingo-cell.drag-over {
-            border-color: #feca57;
-            box-shadow: 0 0 15px rgba(254, 202, 87, 0.5);
-            transform: scale(1.05);
-        }
-
-        .bingo-cell:hover:not(.claimed) {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .bingo-cell.claimed {
-            background: linear-gradient(135deg, #2ecc71, #27ae60);
-            border-color: #2ecc71;
-            cursor: default;
-        }
-
-        .bingo-cell.claimed .cell-text {
-            display: none;
-        }
-
-        .bingo-cell.claimed .claim-info {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            font-size: 0.7rem;
-            width: 100%;
-        }
-
-        .bingo-cell.claimed .char-image {
-            width: 80%;
-            height: 60%;
-            object-fit: cover;
-            border-radius: 5px;
-            margin-bottom: 5px;
-        }
-
-        .claim-info .answer {
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-
-        .claim-info .player {
-            opacity: 0.8;
-            font-size: 0.65rem;
-        }
-
-        .waiting-text {
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 1.2rem;
-            margin: 50px 0;
-        }
-
-        .search-box {
-            margin-bottom: 15px;
-        }
-
-        .search-box input {
-            width: 100%;
-            padding: 10px;
-            font-size: 0.9rem;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-        }
-
-        .search-box input:focus {
-            outline: none;
-            border-color: #a55eea;
-        }
-
-        .search-results {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .search-result-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            cursor: grab;
-            transition: all 0.3s ease;
-        }
-
-        .search-result-item:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .search-result-item.dragging {
-            opacity: 0.5;
-        }
-
-        .search-result-item img {
-            width: 50px;
-            height: 50px;
-            object-fit: cover;
-            border-radius: 5px;
-        }
-
-        .search-result-item .result-info {
-            flex: 1;
-            text-align: left;
-            font-size: 0.8rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .search-result-item .result-info .name {
-            font-weight: bold;
-        }
-
-        .search-result-item .result-info .anime {
-            font-size: 0.7rem;
-            opacity: 0.7;
-        }
-
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 100;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: linear-gradient(135deg, #2d3436, #1e272e);
-            padding: 30px;
-            border-radius: 15px;
-            width: 90%;
-            max-width: 400px;
-            text-align: center;
-        }
-
-        .modal h2 {
-            margin-bottom: 20px;
-            color: #feca57;
-        }
-
-        .modal p {
-            margin-bottom: 15px;
-            opacity: 0.8;
-        }
-
-        .modal input {
-            width: 100%;
-            padding: 12px;
-            font-size: 1rem;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            margin-bottom: 20px;
-        }
-
-        .modal input:focus {
-            outline: none;
-            border-color: #feca57;
-        }
-
-        .modal .btn-submit {
-            background: linear-gradient(90deg, #feca57, #ff9f43);
-            color: #1a1a2e;
-            font-weight: bold;
-        }
-
-        .players-count {
-            margin-bottom: 20px;
-            opacity: 0.7;
-        }
-
-        @media (max-width: 900px) {
-            .main-layout {
-                flex-direction: column;
-            }
-            
-            .search-section {
-                width: 100%;
-                max-height: 300px;
-            }
-        }
-
-        @media (max-width: 600px) {
-            h1 {
-                font-size: 1.8rem;
-            }
-
-            .bingo-cell {
-                font-size: 0.65rem;
-                padding: 3px;
-            }
-
-            .bingo-grid {
-                gap: 5px;
-            }
-
-            .claim-info .answer,
-            .claim-info .player {
-                font-size: 0.6rem;
-            }
-        }
+        /* สีแยกแกนให้ดูง่าย */
+        .header-col { background: #3498db; height: 60px; font-weight: bold; font-size: 0.9rem; } /* แนวตั้ง */
+        .header-row { background: #e74c3c; width: 100px; font-weight: bold; font-size: 0.9rem; } /* แนวนอน */
+        
+        .empty-corner { background: transparent; border: none; }
+        .claimed img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+        
+        /* แสดงเงื่อนไขเล็กๆ ในช่อง */
+        .hint { position: absolute; bottom: 2px; font-size: 0.6rem; color: #777; pointer-events: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎌 Anime Bingo</h1>
-        <p class="players-count" id="playersCount"></p>
-        
-        <div class="controls" id="controls" style="display: none;">
-            <button class="btn btn-start" onclick="startGame()">เริ่มเกม</button>
-            <button class="btn btn-reset" onclick="resetGame()">รีเซ็ต</button>
-        </div>
 
-        <div id="waitingText" class="waiting-text">กด "เริ่มเกม" เพื่อสุ่มโจทย์</div>
-
-        <div class="main-layout">
-            <div class="bingo-section">
-                <div class="bingo-grid" id="bingoGrid" style="display: none;"></div>
-            </div>
-
-            <div class="search-section">
-                <h3 style="margin-bottom: 15px; color: #a55eea;">🔍 ค้นหาตัวละคร</h3>
-                <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="พิมชื่อตัวละคร..." onkeypress="handleSearchKeypress(event)">
-                </div>
-                <button class="btn btn-search" onclick="searchCharacter()">ค้นหา</button>
-                <div class="search-results" id="searchResults"></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal-overlay" id="nameModal">
-        <div class="modal">
-            <h2>กรอกชื่อผู้เล่น</h2>
-            <input type="text" id="playerName" placeholder="ชื่อของคุณ" maxlength="20">
-            <button class="btn btn-submit" onclick="setPlayerName()">ตกลง</button>
-        </div>
-    </div>
-
-    <div class="modal-overlay" id="claimModal">
-        <div class="modal">
-            <h2>ตอบโจทย์</h2>
-            <p id="slotPrompt"></p>
-            <input type="text" id="claimAnswer" placeholder="ชื่อตัวละคร/ชื่อเรื่อง" maxlength="30">
-            <button class="btn btn-submit" onclick="submitClaim()">ส่งคำตอบ</button>
-        </div>
-    </div>
+    <div id="status">กำลังเชื่อมต่อ...</div>
+    <div class="bingo-grid" id="grid"></div>
 
     <script>
         const socket = io();
-        let playerName = localStorage.getItem('playerName') || '';
-        let currentSlotIndex = null;
-        let gamePrompts = [];
-        let claimed = {};
-        let draggedImage = null;
-        let draggedName = '';
-
-        if (!playerName) {
-            document.getElementById('nameModal').classList.add('active');
-        }
-
-        function setPlayerName() {
-            const input = document.getElementById('playerName');
-            playerName = input.value.trim();
-            if (playerName) {
-                localStorage.setItem('playerName', playerName);
-                document.getElementById('nameModal').classList.remove('active');
-            }
-        }
-
-        function startGame() {
-            socket.emit('start_game');
-        }
-
-        function resetGame() {
-            socket.emit('reset_game');
-        }
-
-        function handleSearchKeypress(event) {
-            if (event.key === 'Enter') {
-                searchCharacter();
-            }
-        }
-
-        async function searchCharacter() {
-            const query = document.getElementById('searchInput').value.trim();
-            if (!query) return;
-
-            const resultsDiv = document.getElementById('searchResults');
-            resultsDiv.innerHTML = '<p style="opacity:0.7;">กำลังค้นหา...</p>';
-
-            try {
-                const response = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(query)}&limit=10`);
-                const data = await response.json();
-
-                resultsDiv.innerHTML = '';
-
-                if (data.data && data.data.length > 0) {
-                    data.data.forEach(character => {
-                        const item = document.createElement('div');
-                        item.className = 'search-result-item';
-                        item.draggable = true;
-                        
-                        const imageUrl = character.images.jpg.image_url || '';
-                        const name = character.name || character.name_kanji || 'Unknown';
-                        const anime = character.anime?.[0]?.anime?.title || '';
-
-                        item.innerHTML = `
-                            <img src="${imageUrl}" alt="${name}" onerror="this.src='https://via.placeholder.com/50?text=?'">
-                            <div class="result-info">
-                                <div class="name">${name}</div>
-                                <div class="anime">${anime}</div>
-                            </div>
-                        `;
-
-                        item.addEventListener('dragstart', (e) => {
-                            draggedImage = imageUrl;
-                            draggedName = name;
-                            item.classList.add('dragging');
-                            e.dataTransfer.setData('text/plain', JSON.stringify({
-                                image: imageUrl,
-                                name: name
-                            }));
-                        });
-
-                        item.addEventListener('dragend', () => {
-                            item.classList.remove('dragging');
-                        });
-
-                        resultsDiv.appendChild(item);
-                    });
-                } else {
-                    resultsDiv.innerHTML = '<p style="opacity:0.7;">ไม่พบผลลัพธ์</p>';
-                }
-            } catch (error) {
-                resultsDiv.innerHTML = '<p style="opacity:0.7;">เกิดข้อผิดพลาด ลองใหม่</p>';
-            }
-        }
 
         socket.on('game_started', (data) => {
-            gamePrompts = data.prompts;
-            claimed = {};
-            
-            for (let i = 0; i < 25; i++) {
-                claimed[i] = null;
-            }
-
-            document.getElementById('waitingText').style.display = 'none';
-            document.getElementById('controls').style.display = 'block';
-            renderGrid();
-        });
-
-        socket.on('slot_claimed', (data) => {
-            claimed[data.index] = { 
-                answer: data.answer, 
-                user: data.user,
-                image_url: data.image_url 
-            };
-            updateCell(data.index, data.answer, data.user, data.image_url);
-        });
-
-        socket.on('slot_already_claimed', (data) => {
-            alert('ช่องนี้ถูกตอบไปแล้ว!');
-        });
-
-        socket.on('game_reset', () => {
-            gamePrompts = [];
-            claimed = {};
-            for (let i = 0; i < 25; i++) {
-                claimed[i] = null;
-            }
-            document.getElementById('waitingText').style.display = 'block';
-            document.getElementById('controls').style.display = 'none';
-            document.getElementById('bingoGrid').style.display = 'none';
-        });
-
-        function renderGrid() {
-            const grid = document.getElementById('bingoGrid');
+            const grid = document.getElementById('grid');
             grid.innerHTML = '';
-            grid.style.display = 'grid';
 
-            for (let i = 0; i < 25; i++) {
-                const cell = document.createElement('div');
-                cell.className = 'bingo-cell';
-                cell.id = 'cell-' + i;
-                
-                if (claimed[i]) {
-                    cell.classList.add('claimed');
-                    let html = '<div class="claim-info">';
-                    if (claimed[i].image_url) {
-                        html += `<img class="char-image" src="${claimed[i].image_url}" onerror="this.style.display='none'">`;
-                    }
-                    html += `<span class="answer">${claimed[i].answer}</span>`;
-                    html += `<span class="player">${claimed[i].user}</span>`;
-                    html += '</div>';
-                    cell.innerHTML = html;
-                } else {
-                    cell.innerHTML = `<span class="cell-text">${gamePrompts[i]}</span>`;
-                    
-                    cell.addEventListener('dragover', (e) => {
-                        e.preventDefault();
-                        cell.classList.add('drag-over');
-                    });
-                    
-                    cell.addEventListener('dragleave', () => {
-                        cell.classList.remove('drag-over');
-                    });
-                    
-                    cell.addEventListener('drop', (e) => {
-                        e.preventDefault();
-                        cell.classList.remove('drag-over');
-                        
-                        try {
-                            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                            handleDrop(i, data.image, data.name);
-                        } catch (err) {
-                            handleDrop(i, draggedImage, draggedName);
-                        }
-                    });
+            // 1. สร้างแถวแรก (มุมว่าง + หัวข้อ Column)
+            const corner = document.createElement('div');
+            corner.className = 'cell empty-corner';
+            grid.appendChild(corner);
 
-                    cell.onclick = () => openClaimModal(i);
-                }
-                
-                grid.appendChild(cell);
-            }
-        }
-
-        function handleDrop(index, imageUrl, name) {
-            if (claimed[index]) return;
-            
-            socket.emit('claim_slot', {
-                index: index,
-                answer: name,
-                user: playerName,
-                image_url: imageUrl
+            data.col_headers.forEach(text => {
+                const head = document.createElement('div');
+                head.className = 'cell header-col';
+                head.innerText = text;
+                grid.appendChild(head);
             });
-        }
 
-        function updateCell(index, answer, user, imageUrl) {
-            const cell = document.getElementById('cell-' + index);
-            if (cell) {
-                cell.classList.add('claimed');
-                cell.onclick = null;
-                
-                let html = '<div class="claim-info">';
-                if (imageUrl) {
-                    html += `<img class="char-image" src="${imageUrl}" onerror="this.style.display='none'">`;
+            // 2. สร้างแถวที่เหลือ (หัวข้อ Row + ช่อง Bingo)
+            for (let r = 0; r < 5; r++) {
+                // หัวข้อ Row (แนวนอน)
+                const rowHead = document.createElement('div');
+                rowHead.className = 'cell header-row';
+                rowHead.innerText = data.row_headers[r];
+                grid.appendChild(rowHead);
+
+                // ช่องเนื้อหา 5 ช่องในแถวนั้น
+                for (let c = 0; c < 5; c++) {
+                    const sid = `${r}-${c}`;
+                    const cell = document.createElement('div');
+                    cell.id = `slot-${sid}`;
+                    cell.className = 'cell';
+                    
+                    if (data.claimed[sid]) {
+                        cell.innerHTML = `<img src="${data.claimed[sid].img}">`;
+                    } else {
+                        cell.innerHTML = `? <div class="hint">${data.col_headers[c]} + ${data.row_headers[r]}</div>`;
+                    }
+
+                    // ระบบลากวาง (Drag & Drop)
+                    cell.ondragover = (e) => e.preventDefault();
+                    cell.ondrop = (e) => {
+                        const charData = JSON.parse(e.dataTransfer.getData('text'));
+                        socket.emit('claim_slot', { 
+                            slot_id: sid, 
+                            name: charData.name, 
+                            img: charData.img 
+                        });
+                    };
+                    grid.appendChild(cell);
                 }
-                html += `<span class="answer">${answer}</span>`;
-                html += `<span class="player">${user}</span>`;
-                html += '</div>';
-                cell.innerHTML = html;
             }
-        }
+            document.getElementById('status').innerText = "เกมเริ่มแล้ว! หาตัวละครที่ตรงกับเงื่อนไขทั้งแนวตั้งและแนวนอน";
+        });
 
-        function openClaimModal(index) {
-            if (claimed[index]) return;
-            currentSlotIndex = index;
-            document.getElementById('slotPrompt').textContent = gamePrompts[index];
-            document.getElementById('claimAnswer').value = '';
-            document.getElementById('claimModal').classList.add('active');
-        }
-
-        function submitClaim() {
-            const answer = document.getElementById('claimAnswer').value.trim();
-            if (answer && currentSlotIndex !== null) {
-                socket.emit('claim_slot', {
-                    index: currentSlotIndex,
-                    answer: answer,
-                    user: playerName,
-                    image_url: ''
-                });
-                document.getElementById('claimModal').classList.remove('active');
-            }
-        }
+        socket.on('slot_claimed', (res) => {
+            const target = document.getElementById(`slot-${res.data.slot_id}`);
+            target.innerHTML = `<img src="${res.data.img}">`;
+            target.classList.add('claimed');
+        });
     </script>
 </body>
 </html>
