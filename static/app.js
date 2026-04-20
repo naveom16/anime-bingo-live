@@ -1,6 +1,8 @@
 const socket = io();
 let myPlayerId = null;
 let myName = null;
+let myPoints = 0;
+let myIsFirst = false;
 let turnPlayerId = null;
 let currentTemp = null;
 let playerColor = "";
@@ -62,6 +64,8 @@ socket.on('session_ready', (data) => {
     console.log('[client] row_headers:', data.row_headers);
     myPlayerId = data.player_id;
     myName = data.player.name;
+    myPoints = data.player.points || 0;
+    myIsFirst = data.player.is_first || false;
     playerColor = data.player.color;
     cols = data.col_headers || [];
     rows = data.row_headers || [];
@@ -69,6 +73,12 @@ socket.on('session_ready', (data) => {
     localStorage.setItem('animeBingoPlayerName', myName);
     buildGrid(data.claimed);
     updateGameState(data.state);
+    
+    if (myIsFirst) {
+        document.getElementById('kickAll').style.display = 'block';
+    } else {
+        document.getElementById('kickAll').style.display = 'none';
+    }
 });
 
 socket.on('session_error', (data) => {
@@ -331,12 +341,15 @@ function updateGameState(data) {
         const isActive = playerId === turnPlayerId;
         const isDisconnected = !player.connected;
         const isSkull = player.hearts <= 0;
+        const isFirst = player.is_first || false;
+        const points = player.points || 0;
         const card = document.createElement('div');
         card.className = `player-card${isActive ? ' active' : ''}${isDisconnected ? ' disconnected' : ''}${isSkull ? ' skull' : ''}`;
         card.style.color = player.color;
+        const firstEmoji = isFirst ? ' 😺' : '';
         card.innerHTML = `
             <div class="p-dot" style="background:${player.color};"></div>
-            <div class="player-name">${player.name}</div>
+            <div class="player-name">${player.name}${firstEmoji} <span style="color:#f1c40f;">★${points}</span></div>
             <div class="hearts">${'❤️'.repeat(Math.max(0, player.hearts))}</div>
         `;
         playerArea.appendChild(card);

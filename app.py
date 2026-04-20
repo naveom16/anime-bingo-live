@@ -137,6 +137,23 @@ def on_disconnect():
     sid = request.sid
     logger.info('Socket disconnected: %s', sid)
     session_manager.detach_session(sid)
+    
+    # Check if no players left online
+    remaining = session_manager.get_all_sessions()
+    has_online = any(s['connected'] for s in remaining.values())
+    if not has_online and remaining:
+        # All players offline - clear game state but keep scores
+        game_state['claimed'] = {}
+        game_state['current_turn_idx'] = 0
+        logger.info('All players offline - game cleared')
+    elif not remaining:
+        # No players at all - full reset
+        game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics()
+        game_state['claimed'] = {}
+        game_state['player_order'] = []
+        game_state['current_turn_idx'] = 0
+        logger.info('No players - full reset')
+    
     broadcast_state()
 
 @socketio.on('join_game')
@@ -146,6 +163,8 @@ def handle_join(data):
     name = data.get('name', 'Player').strip()[:24] or 'Player'
     session = None
     reconnect = False
+    
+    is_first = len(session_manager.get_all_sessions()) == 0
 
     if player_id:
         session = session_manager.get_by_player_id(player_id)
@@ -156,8 +175,11 @@ def handle_join(data):
     if session is None:
         assigned_color = PLAYER_COLORS[len(session_manager.get_all_sessions()) % len(PLAYER_COLORS)]
         session = session_manager.register_new_player(name, sid, assigned_color)
+        if is_first:
+            session['is_first'] = True
+            session['points'] = 0
         game_state['player_order'].append(session['player_id'])
-        logger.info('New player joined: %s %s', session['player_id'], session['name'])
+        logger.info('New player joined: %s %s (first=%s)', session['player_id'], session['name'], is_first)
 
     if session['player_id'] not in game_state['player_order']:
         game_state['player_order'].append(session['player_id'])
@@ -169,6 +191,8 @@ def handle_join(data):
             'name': session['name'],
             'color': session['color'],
             'hearts': session['hearts'],
+            'points': session.get('points', 0),
+            'is_first': session.get('is_first', False),
             'connected': session['connected'],
         },
         'col_headers': game_state['col_headers'],
@@ -177,7 +201,7 @@ def handle_join(data):
         'state': get_state_payload(),
         'reconnect': reconnect,
     })
-    logger.info('Player %s joined or reconnected: sid=%s reconnect=%s', session['player_id'], sid, reconnect)
+    logger.info('Player %s joined or reconnected: sid=%s reconnect=%s is_first=%s', session['player_id'], sid, reconnect, session.get('is_first', False))
     broadcast_state()
 
 @socketio.on('sync_temp_move')
@@ -268,6 +292,30 @@ def handle_skip():
     advance_turn()
     emit('reload_page', {'action': 'skip'}, broadcast=True)
     broadcast_state()
+
+@socketio.on('kick_all_except_me')
+def handle_kick_all():
+    sid = request.sid
+    session = session_manager.get_by_sid(sid)
+    if not session:
+        return
+    if not session.get('is_first', False):
+        return
+    
+    all_sessions = session_manager.get_all_sessions()
+    for player_id, s in all_sessions.items():
+        if player_id != session['player_id']:
+            if s.get('sid'):
+                socketio.disconnect(s['sid'])
+    
+    game_state['claimed'] = {}
+    game_state['player_order'] = [session['player_id']]
+    game_state['current_turn_idx'] = 0
+    session['hearts'] = 3
+    
+    emit('kicked_all', {'message': 'ไล่ทุกคนออกแล้ว! เริ่มเกมใหม่'}, broadcast=True)
+    broadcast_state()
+    logger.info('First player kicked everyone else')
 
 @socketio.on('request_reset')
 def handle_request_reset():
@@ -366,17 +414,21 @@ def check_win_condition():
     # Check if any player has completed a bingo (5 in a row/col/diagonal)
     # For simplicity, check if all slots are claimed
     if len(game_state['claimed']) >= 25:
-        # Find winner
+        # Find winner by points
         all_sessions = session_manager.get_all_sessions()
-        max_hearts = max([s['hearts'] for s in all_sessions.values()]) if all_sessions else 0
-        winners = [s['name'] for s in all_sessions.values() if s['hearts'] == max_hearts]
+        if not all_sessions:
+            return
+            
+        max_points = max([s.get('points', 0) for s in all_sessions.values()])
+        winners = [s for s in all_sessions.values() if s.get('points', 0) == max_points]
         
         if len(winners) > 1:
             winner_msg = 'ว่าหาผลสรุปไม่ได้ ;D'
         else:
-            winner_msg = f'ผู้ชนะคือ {winners[0]}!'
+            winners[0]['points'] = winners[0].get('points', 0) + 1
+            winner_msg = f'ผู้ชนะคือ {winners[0]["name"]}! (+1 แต้ม)'
         
-        reset_bingo(winner_msg)
+        msg = reset_bingo(winner_msg)
         emit('game_over', {'message': winner_msg}, broadcast=True)
         logger.info('Bingo reset due to game win: %s', winner_msg)
 
@@ -385,9 +437,9 @@ def check_tie_condition():
     # Check if there's a tie (e.g., multiple players with same score)
     # For now, simple check: if all players have 0 hearts
     active_sessions = [s for s in session_manager.get_all_sessions().values() if s['connected']]
-    if all(s['hearts'] <= 0 for s in active_sessions):
-        reset_bingo()
-        emit('bingo_reset', {'reason': 'tie'}, broadcast=True)
+    if active_sessions and all(s['hearts'] <= 0 for s in active_sessions):
+        msg = reset_bingo('ว่าหาผลสรุปไม่ได้ ;D')
+        emit('game_over', {'message': msg}, broadcast=True)
         logger.info('Bingo reset due to tie')
 
 

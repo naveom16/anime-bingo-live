@@ -29,6 +29,7 @@
                 <button id="confirm" onclick="showConfirmModal()" disabled>ยืนยันช่องนี้</button>
                 <button id="skip" onclick="socket.emit('skip_turn')" disabled>ข้ามตานี้</button>
                 <button id="reset" onclick="socket.emit('request_reset')">รีเซ็ตเกม</button>
+                <button id="kickAll" onclick="socket.emit('kick_all_except_me')" style="background:#e74c3c;">Kick ทุกคน</button>
             </div>
             <div class="action-row" id="resetVoteRow" style="display:none;">
                 <span style="color:#999;font-size:0.9rem;">โหวตรีเซ็ต: </span>
