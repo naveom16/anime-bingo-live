@@ -1,346 +1,69 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Bingo - UI Improved</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <title>Anime Bingo - Reconnect Ready</title>
     <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;500;700&display=swap" rel="stylesheet">
-    <style>
-        :root { --bg: #0b0b18; --card: #1a1a2e; --p: #a55eea; --success: #2ecc71; --danger: #ff4757; --accent: #3498db; }
-        body { font-family: 'Kanit', sans-serif; background: var(--bg); color: white; margin: 0; display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
-        
-        /* Grid Layout */
-        .bingo-container { display: grid; grid-template-columns: 100px repeat(5, 110px); gap: 10px; margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.03); border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .cell { width: 110px; height: 110px; background: var(--card); border: 2px solid #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; transition: all 0.2s ease; cursor: default; }
-        .h-col { height: 50px; background: var(--accent); font-size: 0.75rem; font-weight: bold; text-align: center; padding: 5px; border-color: transparent; }
-        .h-row { width: 100px; background: #e74c3c; font-size: 0.75rem; font-weight: bold; text-align: center; padding: 5px; border-color: transparent; }
-        .cell img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-        
-        .cell.drop-zone { cursor: pointer; border-style: dashed; background: rgba(255,255,255,0.02); }
-        .cell.drop-zone:hover { background: rgba(165, 94, 234, 0.1); border-color: var(--p); }
-
-        /* Player Identity */
-        .player-status-container { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
-        .player-card { display: flex; align-items: center; gap: 10px; background: #252545; padding: 8px 18px; border-radius: 50px; border: 3px solid transparent; transition: 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
-        .p-dot { width: 14px; height: 14px; border-radius: 50%; }
-
-        /* Dispute UI */
-        .dispute-badge { position: absolute; top: 5px; left: 5px; background: var(--danger); font-size: 10px; padding: 2px 8px; border-radius: 10px; z-index: 5; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-        .vote-btn { position: absolute; bottom: 8px; right: 8px; background: var(--danger); border: none; color: white; border-radius: 6px; font-size: 10px; padding: 5px 10px; cursor: pointer; opacity: 0; transition: 0.2s; z-index: 10; font-weight: bold; }
-        .cell.locked:hover .vote-btn { opacity: 1; }
-
-        /* New Improved Search UI */
-        .search-section { width: 100%; max-width: 850px; background: var(--card); padding: 25px; border-radius: 24px; border: 1px solid #333; box-shadow: 0 15px 35px rgba(0,0,0,0.4); }
-        .search-header { margin-bottom: 20px; }
-        .search-input { width: 100%; padding: 18px; border-radius: 15px; background: #000; border: 2px solid #333; color: white; outline: none; font-size: 1rem; transition: 0.3s; font-family: 'Kanit', sans-serif; }
-        .search-input:focus { border-color: var(--p); box-shadow: 0 0 15px rgba(165, 94, 234, 0.2); }
-        
-        .result-label { font-size: 0.9rem; color: #888; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; font-weight: bold; }
-        .result-label span { background: #333; color: #fff; padding: 2px 8px; border-radius: 5px; font-size: 0.7rem; }
-
-        .scroll-container { display: flex; gap: 15px; overflow-x: auto; padding: 10px 5px 20px; border-radius: 12px; margin-bottom: 20px; scrollbar-width: thin; scrollbar-color: var(--p) transparent; }
-        .scroll-container::-webkit-scrollbar { height: 6px; }
-        .scroll-container::-webkit-scrollbar-thumb { background: var(--p); border-radius: 10px; }
-
-        .item-card { flex: 0 0 120px; background: #000; border-radius: 15px; overflow: hidden; border: 1px solid #333; cursor: pointer; text-align: center; transition: 0.3s ease; position: relative; }
-        .item-card:hover { transform: translateY(-5px); border-color: var(--accent); box-shadow: 0 5px 15px rgba(52, 152, 219, 0.2); }
-        .item-card.char:hover { border-color: var(--p); box-shadow: 0 5px 15px rgba(165, 94, 234, 0.2); cursor: grab; }
-        .item-card img { width: 100%; height: 130px; object-fit: cover; pointer-events: none; }
-        .item-name { font-size: 0.75rem; padding: 8px 5px; height: 32px; display: flex; align-items: center; justify-content: center; line-height: 1.2; overflow: hidden; }
-
-        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: none; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); }
-        .modal.active { display: flex; }
-        .modal-box { background: var(--card); border: 2px solid var(--p); padding: 35px; border-radius: 30px; text-align: center; width: 90%; max-width: 420px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-        
-        button:disabled { opacity: 0.5 !important; cursor: not-allowed !important; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
-
-    <!-- Overlay Login -->
-    <div id="loginOverlay" style="position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:2000;">
-        <div style="background:var(--card); padding:45px; border-radius:30px; text-align:center; border:2px solid var(--p); width:380px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);">
-            <h1 style="color:var(--p); margin-top:0; letter-spacing: 2px;">ANIME BINGO</h1>
-            <p style="color:#888; margin-bottom:25px;">กรุณาระบุชื่อเพื่อร่วมสนุก</p>
-            <input type="text" id="username" placeholder="ชื่อเล่นของคุณ..." style="padding:18px; width:100%; border-radius:15px; border:2px solid #333; background:#000; color:white; margin-bottom:25px; outline:none; font-size:1.1rem; box-sizing: border-box; text-align: center;">
-            <button onclick="enterGame()" style="background:var(--p); color:white; border:none; padding:15px; border-radius:15px; font-weight:bold; width:100%; cursor:pointer; font-size:1.2rem; transition: 0.3s;">เข้าร่วมเกม</button>
+    <div id="loginOverlay" class="login-overlay" style="display:none;">
+        <div class="login-box panel-card">
+            <h1>ANIME BINGO</h1>
+            <p>กรุณาระบุชื่อเพื่อร่วมสนุก</p>
+            <input type="text" id="username" placeholder="ชื่อเล่นของคุณ...">
+            <button onclick="enterGame()">เข้าร่วมเกม</button>
         </div>
     </div>
 
-    <!-- Modal Confirm -->
+    <div class="app-shell">
+        <main class="game-area">
+            <section class="player-status-container" id="players"></section>
+            <div id="turnIndicator" class="turn-indicator">รอเชื่อมต่อ...</div>
+
+            <div class="bingo-container" id="bingoGrid"></div>
+
+            <div class="action-row">
+                <button id="skip" onclick="socket.emit('skip_turn')" disabled>ข้ามตานี้</button>
+                <button id="confirm" onclick="showConfirmModal()" disabled>ยืนยันช่องนี้</button>
+            </div>
+        </main>
+
+        <aside class="search-sidebar">
+            <div class="panel-card search-panel">
+                <h2>ค้นหาอนิเมะ &amp; ตัวละคร</h2>
+                <input id="search" class="search-input" placeholder="?? พิมพ์ชื่ออนิเมะ..." oninput="onSearch()">
+
+                <div id="animeResultsLabel" class="result-label" style="display:none;">
+                    <span>?? ผลการค้นหาอนิเมะ</span>
+                    <span id="animeCount"></span>
+                </div>
+                <div id="animeResults" class="scroll-container"></div>
+
+                <div id="charResultsLabel" class="result-label" style="display:none;">
+                    <span>?? ตัวละครในเรื่อง</span>
+                    <span id="charCount"></span>
+                </div>
+                <div id="charResults" class="scroll-container"></div>
+            </div>
+        </aside>
+    </div>
+
     <div id="confirmModal" class="modal">
-        <div class="modal-box">
-            <h2 style="margin-top:0; color: var(--success);">🤖 ยืนยันข้อมูล</h2>
-            <div id="cImg" style="margin:25px 0; display: flex; justify-content: center;"></div>
-            <p id="cText" style="font-weight:500; font-size:1.1rem; margin-bottom: 30px;"></p>
-            <div style="display:flex; gap:15px; justify-content:center;">
-                <button onclick="submitMove()" style="background:var(--success); color:white; border:none; padding:12px 30px; border-radius:12px; font-weight:bold; cursor:pointer; flex: 1;">ยืนยัน</button>
-                <button onclick="closeConfirm()" style="background:#444; color:white; border:none; padding:12px 30px; border-radius:12px; font-weight:bold; cursor:pointer; flex: 1;">ยกเลิก</button>
+        <div class="modal-box panel-card">
+            <h2>?? ยืนยันข้อมูล</h2>
+            <div id="cImg"></div>
+            <p id="cText"></p>
+            <div class="action-row">
+                <button onclick="submitMove()" style="background:var(--success);">ยืนยัน</button>
+                <button onclick="closeConfirm()" style="background:#444;">ยกเลิก</button>
             </div>
         </div>
     </div>
 
-    <!-- Game Header -->
-    <div class="player-status-container" id="players"></div>
-    <div id="turnIndicator" style="font-size:1.3rem; font-weight:bold; margin-bottom:20px;"></div>
-
-    <!-- Main Board -->
-    <div class="bingo-container" id="bingoGrid"></div>
-
-    <!-- Action Buttons -->
-    <div style="display:flex; gap:20px; margin-bottom:40px;">
-        <button id="skip" onclick="socket.emit('skip_turn')" style="background:#444; color:white; border:none; padding:15px 35px; border-radius:15px; font-weight:bold; cursor:pointer; transition: 0.3s;">ข้ามตานี้</button>
-        <button id="confirm" onclick="showConfirmModal()" disabled style="background:var(--success); color:white; border:none; padding:15px 35px; border-radius:15px; font-weight:bold; cursor:pointer; transition: 0.3s; box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);">ยืนยันช่องนี้</button>
-    </div>
-
-    <!-- Improved Search Section -->
-    <div class="search-section">
-        <div class="search-header">
-            <input type="text" id="search" placeholder="🔍 พิมพ์ชื่ออนิเมะเพื่อค้นหาตัวละคร..." oninput="onSearch()" class="search-input">
-        </div>
-        
-        <div id="animeResultsLabel" class="result-label" style="display:none;">🎬 ผลการค้นหาอนิเมะ <span id="animeCount">0</span></div>
-        <div class="scroll-container" id="animeResults"></div>
-        
-        <div id="charResultsLabel" class="result-label" style="display:none;">👥 ตัวละครในเรื่อง <span id="charCount">0</span></div>
-        <div class="scroll-container" id="charResults"></div>
-    </div>
-
-    <script>
-        const socket = io();
-        let mySid = "", myName = "", turnSid = "", cols = [], rows = [], currentTemp = null, playerColor = "";
-
-        function enterGame() {
-            const n = document.getElementById('username').value.trim();
-            if(n) { myName = n; socket.emit('join_game', {name:n}); document.getElementById('loginOverlay').style.display='none'; }
-        }
-
-        socket.on('game_started', (data) => {
-            cols = data.col_headers; rows = data.row_headers;
-            mySid = socket.id;
-            buildGrid(data.claimed);
-        });
-
-        function buildGrid(claimed) {
-            const grid = document.getElementById('bingoGrid');
-            grid.innerHTML = "";
-            
-            grid.appendChild(createHeaderCell("", "transparent"));
-            cols.forEach(c => grid.appendChild(createHeaderCell(c, "var(--accent)")));
-
-            for(let r=0; r<5; r++) {
-                grid.appendChild(createHeaderCell(rows[r], "#e74c3c", true));
-                for(let c=0; c<5; c++) {
-                    const sid = `${r}-${c}`;
-                    const cell = document.createElement('div');
-                    cell.id = `cell-${sid}`;
-                    cell.className = 'cell';
-                    
-                    if(claimed[sid]) {
-                        setLockedCell(cell, claimed[sid], sid);
-                    } else {
-                        cell.classList.add('drop-zone');
-                        cell.innerHTML = '<span style="color:#444; font-size:2rem; font-weight:bold;">?</span>';
-                        cell.ondragover = (e) => e.preventDefault();
-                        cell.ondrop = (e) => onDrop(e, sid);
-                        cell.onclick = () => onQuickCancel(sid);
-                        cell.ondragstart = (e) => onInternalDrag(e, sid);
-                    }
-                    grid.appendChild(cell);
-                }
-            }
-        }
-
-        function createHeaderCell(text, bg, isRow = false) {
-            const div = document.createElement('div');
-            div.className = `cell ${isRow ? 'h-row' : 'h-col'}`;
-            if(bg === "transparent") div.style.background = "transparent", div.style.border = "none";
-            else div.style.background = bg;
-            div.innerText = text;
-            return div;
-        }
-
-        function onDrop(e, sid) {
-            if(turnSid !== mySid) return;
-            const raw = e.dataTransfer.getData('text');
-            if(!raw) return;
-            const data = JSON.parse(raw);
-
-            if(currentTemp) {
-                const old = document.getElementById(`cell-${currentTemp.slot_id}`);
-                if(old) { 
-                    old.innerHTML = '<span style="color:#444; font-size:2rem; font-weight:bold;">?</span>'; 
-                    old.style.borderColor = "#333"; 
-                    old.draggable = false; 
-                }
-            }
-
-            const cell = document.getElementById(`cell-${sid}`);
-            cell.innerHTML = `<img src="${data.img}">`;
-            cell.style.borderColor = playerColor;
-            cell.draggable = true;
-            
-            currentTemp = { slot_id: sid, img: data.img, name: data.name };
-            socket.emit('sync_temp_move', currentTemp);
-            document.getElementById('confirm').disabled = false;
-        }
-
-        function onInternalDrag(e, sid) {
-            if(turnSid !== mySid || !currentTemp || currentTemp.slot_id !== sid) { e.preventDefault(); return; }
-            e.dataTransfer.setData('text', JSON.stringify(currentTemp));
-        }
-
-        function onQuickCancel(sid) {
-            if(turnSid === mySid && currentTemp && currentTemp.slot_id === sid) {
-                const cell = document.getElementById(`cell-${sid}`);
-                cell.innerHTML = '<span style="color:#444; font-size:2rem; font-weight:bold;">?</span>';
-                cell.style.borderColor = "#333"; cell.draggable = false;
-                currentTemp = null;
-                socket.emit('sync_temp_move', null);
-                document.getElementById('confirm').disabled = true;
-            }
-        }
-
-        function setLockedCell(el, data, sid) {
-            el.innerHTML = `
-                <img src="${data.img}">
-                <button class="vote-btn" onclick="socket.emit('vote_dispute', {slot_id:'${sid}'})">ค้าน!</button>
-                <div id="dispute-${sid}" class="dispute-badge" style="display:${data.disputes?.length ? 'block' : 'none'}">ค้าน ${data.disputes?.length}</div>
-            `;
-            el.className = 'cell locked';
-            el.style.border = `4px solid ${data.color}`;
-            el.style.boxShadow = `0 0 15px ${data.color}44`;
-        }
-
-        socket.on('player_moving', (data) => {
-            document.querySelectorAll('.cell.drop-zone').forEach(c => { 
-                c.innerHTML = '<span style="color:#444; font-size:2rem; font-weight:bold;">?</span>';
-                c.style.borderColor = "#333"; 
-            });
-            if(data) {
-                const c = document.getElementById(`cell-${data.slot_id}`);
-                if(c) { c.innerHTML = `<img src="${data.img}">`; c.style.borderColor = data.color; }
-            }
-        });
-
-        socket.on('slot_locked', (data) => {
-            const c = document.getElementById(`cell-${data.slot_id}`);
-            if(c) setLockedCell(c, data, data.slot_id);
-            if(mySid === data.sid) { currentTemp = null; document.getElementById('confirm').disabled = true; }
-        });
-
-        socket.on('dispute_update', (data) => {
-            const badge = document.getElementById(`dispute-${data.slot_id}`);
-            if(badge) { badge.innerText = `ค้าน ${data.count}`; badge.style.display = 'block'; }
-        });
-
-        socket.on('update_game_state', (data) => {
-            turnSid = data.order[data.turn];
-            playerColor = data.players[mySid]?.color || "";
-            const pArea = document.getElementById('players');
-            pArea.innerHTML = "";
-            
-            for(const [sid, p] of Object.entries(data.players)) {
-                const active = sid === turnSid;
-                pArea.innerHTML += `
-                    <div class="player-card" style="${active ? 'border-color:'+p.color+'; background: rgba(255,255,255,0.05);' : 'opacity: 0.7;'}">
-                        <div class="p-dot" style="background:${p.color}; box-shadow: 0 0 10px ${p.color};"></div>
-                        <span style="font-weight:bold">${p.name}</span>
-                        <span style="margin-left:5px;">${"❤️".repeat(p.hearts)}</span>
-                    </div>
-                `;
-            }
-            const indicator = document.getElementById('turnIndicator');
-            if(mySid === turnSid) {
-                indicator.innerText = "🎮 ตาของคุณแล้ว! เลือกตัวละครมาวางได้เลย";
-                indicator.style.color = "#2ecc71"; // Fix: Use Hex color instead of var()
-            } else {
-                indicator.innerText = "⌛ รอเพื่อนเล่น...";
-                indicator.style.color = "#888";
-            }
-            document.getElementById('skip').disabled = (mySid !== turnSid);
-        });
-
-        let searchTimeout;
-        function onSearch() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(async () => {
-                const v = document.getElementById('search').value.trim();
-                if(v.length < 3) return;
-                
-                try {
-                    const r = await fetch(`https://api.jikan.moe/v4/anime?q=${v}&limit=10`);
-                    const d = await r.json();
-                    
-                    const out = document.getElementById('animeResults');
-                    const label = document.getElementById('animeResultsLabel');
-                    const count = document.getElementById('animeCount');
-                    
-                    out.innerHTML = "";
-                    if(d.data && d.data.length > 0) {
-                        label.style.display = 'flex';
-                        count.innerText = d.data.length;
-                        d.data.forEach(a => {
-                            const div = document.createElement('div');
-                            div.className = "item-card";
-                            div.innerHTML = `
-                                <img src="${a.images.jpg.image_url}">
-                                <div class="item-name">${a.title}</div>
-                            `;
-                            div.onclick = () => getChars(a.mal_id, a.title);
-                            out.appendChild(div);
-                        });
-                    } else {
-                        label.style.display = 'none';
-                    }
-                } catch(e) { console.error(e); }
-            }, 500);
-        }
-
-        async function getChars(id, title) {
-            try {
-                const r = await fetch(`https://api.jikan.moe/v4/anime/${id}/characters`);
-                const d = await r.json();
-                
-                const out = document.getElementById('charResults');
-                const label = document.getElementById('charResultsLabel');
-                const count = document.getElementById('charCount');
-                
-                out.innerHTML = "";
-                if(d.data && d.data.length > 0) {
-                    label.style.display = 'flex';
-                    count.innerText = Math.min(d.data.length, 20);
-                    d.data.slice(0, 20).forEach(i => {
-                        const c = i.character;
-                        const div = document.createElement('div');
-                        div.className = "item-card char";
-                        div.draggable = true;
-                        div.innerHTML = `
-                            <img src="${c.images.jpg.image_url}">
-                            <div class="item-name">${c.name}</div>
-                        `;
-                        div.ondragstart = (e) => {
-                            if(turnSid !== mySid) { e.preventDefault(); return; }
-                            e.dataTransfer.setData('text', JSON.stringify({name:c.name, img:c.images.jpg.image_url}));
-                        };
-                        out.appendChild(div);
-                    });
-                    out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                } else {
-                    label.style.display = 'none';
-                }
-            } catch(e) { console.error(e); }
-        }
-
-        function showConfirmModal() {
-            if(!currentTemp) return;
-            document.getElementById('cImg').innerHTML = `<img src="${currentTemp.img}" style="width:150px; height:150px; border-radius:20px; border:4px solid ${playerColor}; object-fit: cover; box-shadow: 0 10px 25px rgba(0,0,0,0.4);">`;
-            document.getElementById('cText').innerText = `คุณแน่ใจนะว่า "${currentTemp.name}" \nตรงตามเงื่อนไขของช่องนี้?`;
-            document.getElementById('confirmModal').classList.add('active');
-        }
-        function submitMove() { socket.emit('confirm_final_claim', currentTemp); closeConfirm(); }
-        function closeConfirm() { document.getElementById('confirmModal').classList.remove('active'); }
-    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
+
