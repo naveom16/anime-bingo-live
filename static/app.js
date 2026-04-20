@@ -241,6 +241,9 @@ socket.on('game_over', (data) => {
         }
         previewSlot = null;
     }
+    // Hide reset modal if open
+    const resetModal = document.getElementById('resetModal');
+    if (resetModal) resetModal.classList.remove('active');
     showGameOverPopup(data.message);
 });
 
@@ -270,6 +273,12 @@ socket.on('session_error', (data) => {
 });
 
 socket.on('full_state', (data) => {
+    // Close any open modals
+    const resetModal = document.getElementById('resetModal');
+    if (resetModal) resetModal.classList.remove('active');
+    const bingoModal = document.getElementById('bingoModal');
+    if (bingoModal) bingoModal.classList.remove('active');
+    
     cols = data.col_headers || cols;
     rows = data.row_headers || rows;
     claimed = data.claimed || claimed;
@@ -335,6 +344,7 @@ socket.on('bingo_detected', (data) => {
                 clearInterval(bingoCountdownInterval);
                 bingoCountdownInterval = null;
                 modal.classList.remove('active');
+                location.reload(); // Auto refresh page after countdown ends
             }
         }, 1000);
     }
