@@ -135,6 +135,24 @@ socket.on('dispute_update', (data) => {
     }
 });
 
+socket.on('slot_removed', (data) => {
+    const cell = document.getElementById(`cell-${data.slot_id}`);
+    if (cell) {
+        cell.className = 'cell drop-zone';
+        cell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
+        cell.style.borderColor = '';
+        cell.style.boxShadow = '';
+        cell.onclick = null;
+    }
+});
+
+socket.on('reload_page', (data) => {
+    console.log('[client] reload_page:', data.action);
+    setTimeout(() => {
+        location.reload();
+    }, 500);
+});
+
 socket.on('bingo_reset', (data) => {
     console.log('Bingo reset:', data.reason);
     alert('Bingo ใหม่ถูกสร้างแล้ว! เหตุผล: ' + data.reason);
@@ -259,13 +277,38 @@ function onQuickCancel(slotId) {
 
 function setLockedCell(element, data, slotId) {
     element.className = 'cell locked';
+    element.onclick = () => showCharDetail(data, slotId);
     element.innerHTML = `
         <img src="${data.img}">
-        <button class="vote-btn" onclick="socket.emit('vote_dispute', { slot_id: '${slotId}' })">ค้าน!</button>
+        <button class="vote-btn" onclick="event.stopPropagation(); socket.emit('vote_dispute', { slot_id: '${slotId}' })">ค้าน!</button>
         <div id="dispute-${slotId}" class="dispute-badge" style="display:${data.disputes?.length ? 'block' : 'none'}">ค้าน ${data.disputes?.length || 0}</div>
     `;
     element.style.border = `4px solid ${data.color}`;
     element.style.boxShadow = `0 0 16px ${data.color}44`;
+}
+
+let currentDisputeSlot = null;
+
+function showCharDetail(data, slotId) {
+    currentDisputeSlot = slotId;
+    document.getElementById('charDetailImg').innerHTML = `<img src="${data.img}" style="width:100%;object-fit:cover;">`;
+    document.getElementById('charDetailInfo').innerHTML = `
+        <p style="font-size:1.3rem;font-weight:700;color:#fff;margin:8px 0;">${data.name || 'ไม่ระบุชื่อ'}</p>
+        <p style="font-size:1rem;color:#aaa;margin:4px 0;">${data.anime || 'ไม่ระบุเรื่อง'}</p>
+    `;
+    document.getElementById('charDetailModal').classList.add('active');
+}
+
+function closeCharDetail() {
+    document.getElementById('charDetailModal').classList.remove('active');
+    currentDisputeSlot = null;
+}
+
+function disputeSelectedChar() {
+    if (currentDisputeSlot) {
+        socket.emit('vote_dispute', { slot_id: currentDisputeSlot });
+        closeCharDetail();
+    }
 }
 
 function updateGameState(data) {
@@ -355,7 +398,10 @@ function renderAnimeResults(items) {
     });
 }
 
+let currentAnimeTitle = '';
+
 async function getChars(animeId, animeTitle) {
+    currentAnimeTitle = animeTitle;
     try {
         const response = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/characters`);
         const payload = await response.json();
@@ -390,7 +436,11 @@ function renderCharacterResults(characters, animeTitle) {
                 event.preventDefault();
                 return;
             }
-            event.dataTransfer.setData('text', JSON.stringify({ name: character.name, img: character.images?.jpg?.image_url || '' }));
+            event.dataTransfer.setData('text', JSON.stringify({ 
+                name: character.name, 
+                img: character.images?.jpg?.image_url || '',
+                anime: currentAnimeTitle 
+            }));
         };
         container.appendChild(card);
     });

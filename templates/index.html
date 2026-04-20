@@ -26,8 +26,8 @@
             <div class="bingo-container" id="bingoGrid"></div>
 
             <div class="action-row">
-                <button id="skip" onclick="socket.emit('skip_turn')" disabled>ข้ามตานี้</button>
                 <button id="confirm" onclick="showConfirmModal()" disabled>ยืนยันช่องนี้</button>
+                <button id="skip" onclick="socket.emit('skip_turn')" disabled>ข้ามตานี้</button>
                 <button id="reset" onclick="socket.emit('request_reset')">รีเซ็ตเกม</button>
             </div>
             <div class="action-row" id="resetVoteRow" style="display:none;">
@@ -57,14 +57,26 @@
         </aside>
     </div>
 
-    <div id="confirmModal" class="modal">
+<div id="confirmModal" class="modal">
         <div class="modal-box panel-card">
-            <h2>?? ยืนยันข้อมูล</h2>
+            <h2>ยืนยันข้อมูล</h2>
             <div id="cImg"></div>
             <p id="cText"></p>
             <div class="action-row">
                 <button onclick="submitMove()" class="btn-confirm">ยืนยัน</button>
                 <button onclick="closeConfirm()" class="btn-cancel">ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="charDetailModal" class="modal">
+        <div class="modal-box panel-card">
+            <h2>รายละเอียดตัวละคร</h2>
+            <div id="charDetailImg" style="width:100%;border-radius:12px;overflow:hidden;margin-bottom:12px;"></div>
+            <div id="charDetailInfo" style="text-align:center;"></div>
+            <div class="action-row">
+                <button onclick="closeCharDetail()" class="btn-cancel">ปิด</button>
+                <button onclick="disputeSelectedChar()" class="btn-dispute">ค้าน</button>
             </div>
         </div>
     </div>

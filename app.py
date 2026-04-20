@@ -119,6 +119,7 @@ def handle_confirm(data):
     game_state['claimed'][slot_id] = {
         'img': data['img'],
         'name': data['name'],
+        'anime': data.get('anime', ''),
         'player_id': session['player_id'],
         'color': session['color'],
         'disputes': [],
@@ -131,6 +132,7 @@ def handle_confirm(data):
         'player_id': session['player_id'],
         'color': session['color'],
     }, broadcast=True)
+    emit('reload_page', {'action': 'confirm'}, broadcast=True)
     broadcast_state()
     check_win_condition()
 
@@ -152,9 +154,19 @@ def handle_vote(data):
     # Check if dispute votes exceed half the room
     total_players = len(session_manager.get_all_sessions())
     if total_players > 1 and len(target['disputes']) > total_players // 2:
-        reset_bingo()
-        emit('bingo_reset', {'reason': 'dispute_majority'}, broadcast=True)
-        logger.info('Bingo reset due to dispute majority: %s votes out of %s', len(target['disputes']), total_players)
+        # Find the player who placed this character and deduct 1 heart
+        owner_id = target['player_id']
+        owner_session = session_manager.get_by_player_id(owner_id)
+        if owner_session:
+            owner_session['hearts'] = max(0, owner_session['hearts'] - 1)
+            logger.info('Disputed: %s lost 1 heart, now has %s', owner_id, owner_session['hearts'])
+        
+        # Remove the character from this slot only
+        del game_state['claimed'][slot_id]
+        emit('slot_removed', {'slot_id': slot_id}, broadcast=True)
+        emit('reload_page', {'action': 'dispute'}, broadcast=True)
+        broadcast_state()
+        logger.info('Character removed due to dispute majority: %s votes out of %s', len(target['disputes']), total_players)
 
 
 @socketio.on('skip_turn')
@@ -166,6 +178,7 @@ def handle_skip():
     session['hearts'] = max(0, session['hearts'] - 1)
     logger.info('Turn skipped by %s hearts=%s', session['player_id'], session['hearts'])
     advance_turn()
+    emit('reload_page', {'action': 'skip'}, broadcast=True)
     broadcast_state()
 
 @socketio.on('request_reset')

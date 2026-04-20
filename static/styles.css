@@ -301,6 +301,11 @@ input {
     background: #e67e22;
 }
 
+.btn-dispute {
+    background: #e74c3c;
+    color: white;
+}
+
 .search-panel {
     display: flex;
     flex-direction: column;
