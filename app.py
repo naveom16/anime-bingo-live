@@ -72,14 +72,14 @@ TOPICS_SIDE = [
     'ใส่ชุดเกราะ', 'ใส่สูท', 'ใส่ชุดแฟนตาซี',
     'ตัวสูง', 'ตัวเตี้ย', 'กล้าม', 'ผอม',
     'มีเขา', 'มีปีก', 'มีหาง', 'มีเขี้ยว',
-    'มีรอยสัก', 'มีแผลเป็นบนหน้า', 'มีแผลเป็นตามตัว',
+    'มีรอยสัก', 'มีแผลเป็น', 'มีแผลเป็นตามตัว',
     'ใส่แว่นกันแดด', 'ใส่หมวกคลุม', 'ใส่ฮู้ด',
     'ถือดาบใหญ่', 'ถือปืนคู่', 'ถือคทา', 'ถือโล่',
     'ใช้ธนู', 'ใช้มีด', 'ใช้เคียว',
     'มีสัตว์เลี้ยง', 'มีมาสคอต', 'มีหุ่นยนต์คู่หู',
     'ใส่เครื่องแบบทหาร', 'ใส่ชุดนักเรียนหญิง', 'ใส่ชุดนักเรียนชาย',
     'ใส่ชุดแม่บ้าน', 'ใส่ชุดไอดอล',
-    'มีพลังออร่ารอบตัว', 'มีรอยเรืองแสง',
+    'มีพลังออร่ารอบตัว',
     'มีเสียงพูดแปลก', 'ไม่พูด', 'พูดน้อย',
     'ยิ้มตลอด', 'หน้าตาย', 'ดูน่ากลัว',
     'เด็ก', 'วัยรุ่น', 'ผู้ใหญ่',
@@ -286,11 +286,12 @@ def handle_skip():
     session = session_manager.get_by_sid(request.sid)
     active_id = get_current_player_id()
     if not session or session['player_id'] != active_id:
+        emit('session_error', {'message': 'ไม่ใช่ตาของคุณในตอนนี้'})
         return
+    
     session['hearts'] = max(0, session['hearts'] - 1)
     logger.info('Turn skipped by %s hearts=%s', session['player_id'], session['hearts'])
     advance_turn()
-    emit('reload_page', {'action': 'skip'}, broadcast=True)
     broadcast_state()
 
 @socketio.on('kick_all_except_me')
@@ -330,6 +331,16 @@ def handle_request_reset():
         broadcast_state()
         logger.info('Game manually reset by %s', session['player_id'])
 
+
+@socketio.on('request_full_state')
+def handle_request_full_state():
+    emit('full_state', {
+        'col_headers': game_state['col_headers'],
+        'row_headers': game_state['row_headers'],
+        'claimed': game_state['claimed'],
+        'state': get_state_payload(),
+    })
+
 reset_votes = {}
 
 @socketio.on('vote_reset_game')
@@ -367,10 +378,48 @@ def advance_turn():
     if not game_state['player_order']:
         game_state['current_turn_idx'] = 0
         return
+    
+    # Remove players with 0 hearts from the turn order
+    remove_dead_players()
+    
+    if not game_state['player_order']:
+        game_state['current_turn_idx'] = 0
+        event_bus.publish('turn_changed', turn=0)
+        return
+    
     game_state['current_turn_idx'] = (game_state['current_turn_idx'] + 1) % len(game_state['player_order'])
+    
+    # Auto-skip if the new current player has no hearts or is disconnected
+    current_player_id = get_current_player_id()
+    if current_player_id:
+        current_session = session_manager.get_by_player_id(current_player_id)
+        if current_session and (current_session['hearts'] <= 0 or not current_session['connected']):
+            # Auto-skip dead/disconnected players
+            if current_session['hearts'] > 0:
+                current_session['hearts'] = 0
+            logger.info('Auto-skipping player with no hearts or disconnected: %s', current_player_id)
+            advance_turn()
+            return
+    
     event_bus.publish('turn_changed', turn=game_state['current_turn_idx'])
     logger.info('Turn advanced to index %s', game_state['current_turn_idx'])
     check_tie_condition()
+
+
+def remove_dead_players():
+    """Remove players with 0 hearts from the player order"""
+    all_sessions = session_manager.get_all_sessions()
+    dead_players = [pid for pid in game_state['player_order'] 
+                   if pid in all_sessions and all_sessions[pid].get('hearts', 0) <= 0]
+    
+    for player_id in dead_players:
+        if player_id in game_state['player_order']:
+            game_state['player_order'].remove(player_id)
+            logger.info('Removed dead player from order: %s', player_id)
+    
+    # Normalize turn index if needed
+    if game_state['current_turn_idx'] >= len(game_state['player_order']):
+        game_state['current_turn_idx'] = 0
 
 
 def normalize_turn_index():

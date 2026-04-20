@@ -158,9 +158,16 @@ socket.on('slot_removed', (data) => {
 
 socket.on('reload_page', (data) => {
     console.log('[client] reload_page:', data.action);
-    setTimeout(() => {
-        location.reload();
-    }, 500);
+    // Don't reload the page - just rebuild the grid from server state
+    socket.emit('request_full_state');
+});
+
+socket.on('full_state', (data) => {
+    console.log('[client] full_state received:', data);
+    cols = data.col_headers || [];
+    rows = data.row_headers || [];
+    buildGrid(data.claimed);
+    updateGameState(data.state);
 });
 
 socket.on('game_over', (data) => {
