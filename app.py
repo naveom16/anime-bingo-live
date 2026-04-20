@@ -170,27 +170,44 @@ def handle_join(data):
     session = None
     reconnect = False
     
-    is_first = len(session_manager.get_all_sessions()) == 0
+    existing_sessions = session_manager.get_all_sessions()
+    is_first = len(existing_sessions) == 0
 
     if player_id:
         session = session_manager.get_by_player_id(player_id)
         if session:
             session = session_manager.attach_session(player_id, sid, name)
             reconnect = True
+            # This is a reconnect, not a new player - restore first status
+            is_first = session.get('is_first', False)
 
     if session is None:
-        assigned_color = PLAYER_COLORS[len(session_manager.get_all_sessions()) % len(PLAYER_COLORS)]
+        assigned_color = PLAYER_COLORS[len(existing_sessions) % len(PLAYER_COLORS)]
         session = session_manager.register_new_player(name, sid, assigned_color)
         if is_first:
             session['is_first'] = True
             session['points'] = 0
-        game_state['player_order'].append(session['player_id'])
+        if session['player_id'] not in game_state['player_order']:
+            game_state['player_order'].append(session['player_id'])
         logger.info('New player joined: %s %s (first=%s)', session['player_id'], session['name'], is_first)
-
-    if session['player_id'] not in game_state['player_order']:
-        game_state['player_order'].append(session['player_id'])
+    else:
+        # Reconnecting player - make sure they're in player order
+        if session['player_id'] not in game_state['player_order']:
+            game_state['player_order'].append(session['player_id'])
+            logger.info('Reconnected player added to order: %s', session['player_id'])
 
     normalize_turn_index()
+    
+    # Get current timer state for this turn
+    current_player_id = get_current_player_id()
+    turn_start_time = game_state.get('turn_start_time')
+    turn_duration = game_state.get('turn_duration', 120)
+    
+    # If this player is current turn and there's no timer, start one
+    if current_player_id == session['player_id'] and not turn_start_time:
+        start_turn_timer()
+        turn_start_time = game_state.get('turn_start_time')
+    
     emit('session_ready', {
         'player_id': session['player_id'],
         'player': {
@@ -206,6 +223,8 @@ def handle_join(data):
         'claimed': game_state['claimed'],
         'state': get_state_payload(),
         'reconnect': reconnect,
+        'turn_start_time': turn_start_time,
+        'turn_duration': turn_duration,
     })
     logger.info('Player %s joined or reconnected: sid=%s reconnect=%s is_first=%s', session['player_id'], sid, reconnect, session.get('is_first', False))
     broadcast_state()
@@ -250,7 +269,6 @@ def handle_confirm(data):
         'player_id': session['player_id'],
         'color': session['color'],
     }, broadcast=True)
-    emit('reload_page', {'action': 'confirm'}, broadcast=True)
     broadcast_state()
     check_win_condition()
 
@@ -282,7 +300,6 @@ def handle_vote(data):
         # Remove the character from this slot only
         del game_state['claimed'][slot_id]
         emit('slot_removed', {'slot_id': slot_id}, broadcast=True)
-        emit('reload_page', {'action': 'dispute'}, broadcast=True)
         broadcast_state()
         logger.info('Character removed due to dispute majority: %s votes out of %s', len(target['disputes']), total_players)
 
@@ -345,6 +362,8 @@ def handle_request_full_state():
         'row_headers': game_state['row_headers'],
         'claimed': game_state['claimed'],
         'state': get_state_payload(),
+        'turn_start_time': game_state.get('turn_start_time'),
+        'turn_duration': game_state.get('turn_duration', 120),
     })
 
 reset_votes = {}
@@ -407,6 +426,7 @@ def on_turn_timeout():
     TURN_TIMER = None
     advance_turn()
     broadcast_state()
+    emit('turn_timeout', {'player_id': current_player_id}, broadcast=True)
 
 
 def advance_turn():
