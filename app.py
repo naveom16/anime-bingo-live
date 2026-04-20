@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'anime_bingo_v7_final'
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading', ping_timeout=60, ping_interval=25)
 
 PLAYER_COLORS = [
     '#FF4757', '#2ED573', '#1E90FF', '#ECCC68', '#A55EEA', '#FFA502', '#70A1FF', '#7BED9F'
@@ -167,6 +167,42 @@ def handle_skip():
     logger.info('Turn skipped by %s hearts=%s', session['player_id'], session['hearts'])
     advance_turn()
     broadcast_state()
+
+@socketio.on('request_reset')
+def handle_request_reset():
+    sid = request.sid
+    session = session_manager.get_by_sid(sid)
+    if not session:
+        return
+    total_players = len(session_manager.get_all_sessions())
+    if total_players >= 2:
+        reset_bingo()
+        emit('bingo_reset', {'reason': 'manual_reset', 'reset_by': session['player_id']}, broadcast=True)
+        broadcast_state()
+        logger.info('Game manually reset by %s', session['player_id'])
+
+reset_votes = {}
+
+@socketio.on('vote_reset_game')
+def handle_vote_reset():
+    sid = request.sid
+    session = session_manager.get_by_sid(sid)
+    if not session:
+        return
+    
+    total_players = len(session_manager.get_all_sessions())
+    if session['player_id'] not in reset_votes:
+        reset_votes[session['player_id']] = True
+    
+    vote_count = len(reset_votes)
+    emit('reset_vote_update', {'votes': vote_count, 'total': total_players}, broadcast=True)
+    
+    if total_players > 1 and vote_count > total_players // 2:
+        reset_bingo()
+        emit('bingo_reset', {'reason': 'vote_reset', 'votes': vote_count}, broadcast=True)
+        reset_votes.clear()
+        broadcast_state()
+        logger.info('Game reset by vote: %s/%s', vote_count, total_players)
 
 
 def get_current_player_id():

@@ -7,6 +7,15 @@ let playerColor = "";
 let cols = [];
 let rows = [];
 
+socket.on('reset_vote_update', (data) => {
+    const voteRow = document.getElementById('resetVoteRow');
+    const voteCount = document.getElementById('resetVoteCount');
+    if (voteRow && voteCount) {
+        voteRow.style.display = 'flex';
+        voteCount.textContent = `${data.votes}/${data.total}`;
+    }
+});
+
 const localPlayerId = localStorage.getItem('animeBingoPlayerId');
 const storedName = localStorage.getItem('animeBingoPlayerName');
 function createPersistentId() {
@@ -48,11 +57,12 @@ socket.on('connect', () => {
 });
 
 socket.on('session_ready', (data) => {
+    console.log('[client] session_ready', data);
     myPlayerId = data.player_id;
     myName = data.player.name;
     playerColor = data.player.color;
-    cols = data.col_headers;
-    rows = data.row_headers;
+    cols = data.col_headers || [];
+    rows = data.row_headers || [];
     localStorage.setItem('animeBingoPlayerId', myPlayerId);
     localStorage.setItem('animeBingoPlayerName', myName);
     buildGrid(data.claimed);
@@ -122,12 +132,16 @@ socket.on('disconnect', (reason) => {
 function buildGrid(claimed) {
     const grid = document.getElementById('bingoGrid');
     grid.innerHTML = '';
+    
+    console.log('[client] buildGrid - cols:', cols, 'rows:', rows);
 
     grid.appendChild(createHeaderCell('', true));
     cols.forEach((col) => grid.appendChild(createHeaderCell(col, false)));
 
+    const rowHeaders = (rows && rows.length === 5) ? rows : ['Y1','Y2','Y3','Y4','Y5'];
+    
     for (let r = 0; r < 5; r += 1) {
-        grid.appendChild(createHeaderCell(rows[r], true, true));
+        grid.appendChild(createHeaderCell(rowHeaders[r], true, true));
         for (let c = 0; c < 5; c += 1) {
             const slotId = `${r}-${c}`;
             const cell = document.createElement('div');

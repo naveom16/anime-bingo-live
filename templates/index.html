@@ -28,6 +28,12 @@
             <div class="action-row">
                 <button id="skip" onclick="socket.emit('skip_turn')" disabled>ข้ามตานี้</button>
                 <button id="confirm" onclick="showConfirmModal()" disabled>ยืนยันช่องนี้</button>
+                <button id="reset" onclick="socket.emit('request_reset')">รีเซ็ตเกม</button>
+            </div>
+            <div class="action-row" id="resetVoteRow" style="display:none;">
+                <span style="color:#999;font-size:0.9rem;">โหวตรีเซ็ต: </span>
+                <button id="voteReset" onclick="socket.emit('vote_reset_game')">โหวตรีเซ็ต</button>
+                <span id="resetVoteCount" style="color:#fff;font-size:0.9rem;">0/0</span>
             </div>
         </main>
 
@@ -57,8 +63,8 @@
             <div id="cImg"></div>
             <p id="cText"></p>
             <div class="action-row">
-                <button onclick="submitMove()" style="background:var(--success);">ยืนยัน</button>
-                <button onclick="closeConfirm()" style="background:#444;">ยกเลิก</button>
+                <button onclick="submitMove()" class="btn-confirm">ยืนยัน</button>
+                <button onclick="closeConfirm()" class="btn-cancel">ยกเลิก</button>
             </div>
         </div>
     </div>
