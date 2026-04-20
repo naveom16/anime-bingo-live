@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'anime_bingo_v7_final'
-socketio = SocketIO(app, cors_allowed_origins='*', ping_timeout=60, ping_interval=25, engineio_logger=True)
+socketio = SocketIO(app, cors_allowed_origins='*', ping_timeout=60, ping_interval=25, async_mode='threading')
 
 PLAYER_COLORS = [
     '#FF4757', '#2ED573', '#1E90FF', '#ECCC68', '#A55EEA', '#FFA502', '#70A1FF', '#7BED9F'

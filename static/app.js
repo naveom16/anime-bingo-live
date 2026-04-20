@@ -58,6 +58,8 @@ socket.on('connect', () => {
 
 socket.on('session_ready', (data) => {
     console.log('[client] session_ready', data);
+    console.log('[client] col_headers:', data.col_headers);
+    console.log('[client] row_headers:', data.row_headers);
     myPlayerId = data.player_id;
     myName = data.player.name;
     playerColor = data.player.color;
@@ -114,6 +116,25 @@ socket.on('update_game_state', (data) => {
     updateGameState(data);
 });
 
+socket.on('slot_locked', (data) => {
+    const cell = document.getElementById(`cell-${data.slot_id}`);
+    if (cell) {
+        cell.classList.remove('drop-zone');
+        cell.classList.add('locked');
+        cell.innerHTML = `<img src="${data.img}">`;
+        cell.style.borderColor = data.color;
+        cell.style.borderStyle = 'solid';
+    }
+});
+
+socket.on('dispute_update', (data) => {
+    const badge = document.getElementById(`dispute-${data.slot_id}`);
+    if (badge) {
+        badge.textContent = `ค้าน ${data.count}`;
+        badge.style.display = data.count > 0 ? 'block' : 'none';
+    }
+});
+
 socket.on('bingo_reset', (data) => {
     console.log('Bingo reset:', data.reason);
     alert('Bingo ใหม่ถูกสร้างแล้ว! เหตุผล: ' + data.reason);
@@ -167,12 +188,13 @@ function buildGrid(claimed) {
 function createHeaderCell(text, isCorner = false, isRow = false) {
     const node = document.createElement('div');
     node.className = `cell ${isRow ? 'h-row' : 'h-col'}`;
-    if (isCorner) {
+    if (isCorner && !isRow) {
         node.textContent = '';
         node.style.background = 'transparent';
         node.style.border = 'none';
     } else {
-        node.textContent = text;
+        node.textContent = text || '';
+        node.style.color = '#fff';
     }
     return node;
 }
