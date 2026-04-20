@@ -331,6 +331,10 @@ function closeCharDetail() {
     currentDisputeSlot = null;
 }
 
+let turnStartTime = null;
+let turnDuration = 120;
+let timerInterval = null;
+
 function disputeSelectedChar() {
     if (currentDisputeSlot) {
         socket.emit('vote_dispute', { slot_id: currentDisputeSlot });
@@ -338,9 +342,82 @@ function disputeSelectedChar() {
     }
 }
 
+function startTimer(startTime, duration) {
+    turnStartTime = startTime;
+    turnDuration = duration;
+    
+    if (timerInterval) {
+        clearInterval(timerInterval);
+    }
+    
+    updateTimerDisplay();
+    
+    timerInterval = setInterval(() => {
+        updateTimerDisplay();
+    }, 1000);
+}
+
+function updateTimerDisplay() {
+    if (!turnStartTime) {
+        const timerEl = document.getElementById('timerValue');
+        if (timerEl) timerEl.textContent = '2:00';
+        return;
+    }
+    
+    const now = Date.now();
+    const elapsed = (now - turnStartTime) / 1000;
+    const remaining = Math.max(0, turnDuration - elapsed);
+    
+    const minutes = Math.floor(remaining / 60);
+    const seconds = Math.floor(remaining % 60);
+    const timerEl = document.getElementById('timerValue');
+    if (timerEl) {
+        timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (remaining <= 10) {
+            timerEl.style.color = '#e74c3c';
+            timerEl.style.animation = 'pulse 0.5s infinite';
+        } else if (remaining <= 30) {
+            timerEl.style.color = '#f39c12';
+            timerEl.style.animation = 'none';
+        } else {
+            timerEl.style.color = '#2ecc71';
+            timerEl.style.animation = 'none';
+        }
+    }
+}
+
 function updateGameState(data) {
     turnPlayerId = data.order[data.turn] || null;
     playerColor = data.players?.[myPlayerId]?.color || playerColor;
+    
+    // Update sidebar player list
+    const playerListEl = document.getElementById('playerList');
+    if (playerListEl) {
+        playerListEl.innerHTML = '';
+        Object.entries(data.players || {}).forEach(([playerId, player]) => {
+            const isActive = playerId === turnPlayerId;
+            const isDisconnected = !player.connected;
+            const isSkull = player.hearts <= 0;
+            const isFirst = player.is_first || false;
+            const points = player.points || 0;
+            
+            const card = document.createElement('div');
+            card.className = `player-card${isActive ? ' active' : ''}${isDisconnected ? ' disconnected' : ''}${isSkull ? ' skull' : ''}`;
+            card.style.borderLeftColor = player.color;
+            card.style.borderLeft = '4px solid';
+            
+            const firstEmoji = isFirst ? ' 😺' : '';
+            card.innerHTML = `
+                <div class="player-name">${player.name}${firstEmoji}</div>
+                <div class="player-score">★${points}</div>
+                <div class="hearts">${'❤️'.repeat(Math.max(0, player.hearts))}</div>
+            `;
+            playerListEl.appendChild(card);
+        });
+    }
+    
+    // Update top player area
     const playerArea = document.getElementById('players');
     playerArea.innerHTML = '';
 
@@ -372,14 +449,11 @@ function updateGameState(data) {
     }
     document.getElementById('skip').disabled = (myPlayerId !== turnPlayerId);
 
-    // Auto-skip if current player is disconnected or has no hearts
-    const currentPlayer = data.players?.[turnPlayerId];
-    if (currentPlayer && (currentPlayer.hearts <= 0 || !currentPlayer.connected)) {
-        setTimeout(() => {
-            if (turnPlayerId === myPlayerId) {
-                socket.emit('skip_turn');
-            }
-        }, 2000); // Wait 2 seconds before auto-skip
+    // Start/update timer
+    if (turnPlayerId && data.turn_start_time) {
+        startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
+    } else if (turnPlayerId) {
+        startTimer(Date.now(), data.turn_duration || 120);
     }
 }
 

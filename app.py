@@ -1,5 +1,7 @@
 import logging
 import random
+import time
+import threading
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from server.event_bus import EventBus
@@ -122,7 +124,11 @@ game_state = {
     'claimed': {},
     'player_order': [],
     'current_turn_idx': 0,
+    'turn_start_time': None,
+    'turn_duration': 120,
 }
+
+TURN_TIMER = None
 
 @app.route('/')
 def index():
@@ -374,6 +380,35 @@ def get_current_player_id():
     return game_state['player_order'][idx]
 
 
+def start_turn_timer():
+    global TURN_TIMER
+    if TURN_TIMER:
+        TURN_TIMER.cancel()
+    
+    game_state['turn_start_time'] = time.time()
+    
+    TURN_TIMER = threading.Timer(game_state['turn_duration'], on_turn_timeout)
+    TURN_TIMER.daemon = True
+    TURN_TIMER.start()
+    logger.info('Turn timer started: %s seconds', game_state['turn_duration'])
+
+
+def on_turn_timeout():
+    global TURN_TIMER
+    current_player_id = get_current_player_id()
+    if not current_player_id:
+        return
+    
+    session = session_manager.get_by_player_id(current_player_id)
+    if session:
+        session['hearts'] = max(0, session['hearts'] - 1)
+        logger.info('Turn timeout! %s lost 1 heart, now has %s', current_player_id, session['hearts'])
+    
+    TURN_TIMER = None
+    advance_turn()
+    broadcast_state()
+
+
 def advance_turn():
     if not game_state['player_order']:
         game_state['current_turn_idx'] = 0
@@ -404,6 +439,7 @@ def advance_turn():
     event_bus.publish('turn_changed', turn=game_state['current_turn_idx'])
     logger.info('Turn advanced to index %s', game_state['current_turn_idx'])
     check_tie_condition()
+    start_turn_timer()
 
 
 def remove_dead_players():
@@ -435,6 +471,8 @@ def get_state_payload():
         'players': session_manager.get_all_sessions(),
         'order': game_state['player_order'],
         'turn': game_state['current_turn_idx'],
+        'turn_start_time': game_state.get('turn_start_time'),
+        'turn_duration': game_state.get('turn_duration', 120),
     }
 
 
