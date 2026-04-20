@@ -52,19 +52,27 @@
         <aside class="search-sidebar">
             <div class="panel-card search-panel">
                 <h2>ค้นหาตัวละคร</h2>
-                <input id="search" class="search-input" placeholder="?? พิมพ์ชื่ออนิเมะ..." oninput="onSearch()">
-
-                <div id="animeResultsLabel" class="result-label" style="display:none;">
-                    <span>?? ผลการค้นหาอนิเมะ</span>
-                    <span id="animeCount"></span>
+                
+                <!-- Row 1: Search anime -->
+                <input id="search" class="search-input" placeholder="พิมพ์ชื่ออนิเมะ..." oninput="onSearch()">
+                
+                <!-- Row 2: Anime results OR Character search -->
+                <div id="animeSection">
+                    <div id="animeResultsLabel" class="result-label" style="display:none;">
+                        <span>ผลการค้นหาอนิเมะ</span>
+                        <span id="animeCount"></span>
+                    </div>
+                    <div id="animeResults" class="scroll-container"></div>
                 </div>
-                <div id="animeResults" class="scroll-container"></div>
-
-                <div id="charResultsLabel" class="result-label" style="display:none;">
-                    <span>?? ตัวละครในเรื่อง</span>
-                    <span id="charCount"></span>
+                
+                <div id="charSection" style="display:none;">
+                    <input id="charSearch" class="search-input" placeholder="ค้นหาตัวละครในเรื่อง..." oninput="onCharSearch()">
+                    <div id="charResultsLabel" class="result-label">
+                        <span>ตัวละครในเรื่อง</span>
+                        <span id="charCount"></span>
+                    </div>
+                    <div id="charResults" class="scroll-container"></div>
                 </div>
-                <div id="charResults" class="scroll-container"></div>
             </div>
         </aside>
     </div>
@@ -106,6 +114,44 @@
             <p id="gameOverText" style="font-size:1.3rem;font-weight:700;color:#fff;text-align:center;"></p>
             <div class="action-row">
                 <button onclick="document.getElementById('gameOverModal').classList.remove('active')" class="btn-confirm">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bingoModal" class="modal" onclick="if(event.target === this) dismissBingoDispute()">
+        <div class="modal-box panel-card" style="max-width:420px;">
+            <button class="bingo-close" onclick="dismissBingoDispute()">&times;</button>
+            <h2 style="text-align:center; margin-bottom:10px;">🎉 BINGO!</h2>
+            <p id="bingoText" style="text-align:center; color:#fff; margin-bottom:16px;">มีคนทำบิงโกแล้ว!</p>
+            <div id="bingoCountdown" class="bingo-countdown">10</div>
+            <p style="text-align:center; color:#aaa; font-size:0.9rem;">มีเวลา 10 วินาทีในการค้าน</p>
+        </div>
+    </div>
+
+    <div id="skipModal" class="modal" onclick="if(event.target === this) closeSkipModal()">
+        <div class="modal-box panel-card" style="max-width:320px;">
+            <div class="modal-header">
+                <h2>ข้ามตา</h2>
+                <button class="modal-close" onclick="closeSkipModal()">&times;</button>
+            </div>
+            <p id="skipText" style="text-align:center; color:#fff; margin:20px 0; font-size:1.1rem;"></p>
+            <div class="action-row">
+                <button onclick="closeSkipModal()" class="btn-confirm">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="resetModal" class="modal" onclick="if(event.target === this) closeResetModal()">
+        <div class="modal-box panel-card" style="max-width:360px;">
+            <div class="modal-header">
+                <h2>รีเซ็ตเกม</h2>
+                <button class="modal-close" onclick="closeResetModal()">&times;</button>
+            </div>
+            <p style="text-align:center; color:#fff; margin:16px 0; font-size:1.1rem;">ทำการรีเซ็ตโจทย์ไหม?</p>
+            <div id="resetVoteInfo" style="text-align:center; color:#aaa; margin-bottom:16px; font-size:0.95rem;"></div>
+            <div class="action-row" style="justify-content:center; gap:16px;">
+                <button id="voteResetYes" onclick="socket.emit('vote_reset_game')" class="btn-confirm">รี</button>
+                <button id="voteResetNo" onclick="socket.emit('vote_no_reset')" style="background:#e74c3c; color:white; border:none; border-radius:16px; padding:14px 30px; font-weight:700; cursor:pointer;">ไม่รี</button>
             </div>
         </div>
     </div>

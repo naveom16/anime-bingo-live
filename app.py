@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'anime_bingo_v7_final'
-socketio = SocketIO(app, cors_allowed_origins='*', ping_timeout=60, ping_interval=25, async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins='*', ping_timeout=60, ping_interval=25)
 
 PLAYER_COLORS = [
     '#FF4757', '#2ED573', '#1E90FF', '#ECCC68', '#A55EEA', '#FFA502', '#70A1FF', '#7BED9F'
@@ -314,11 +314,17 @@ def handle_skip():
     
     session['hearts'] = max(0, session['hearts'] - 1)
     logger.info('Turn skipped by %s hearts=%s', session['player_id'], session['hearts'])
+    emit('player_skipped', {
+        'player_id': session['player_id'],
+        'player_name': session['name'],
+        'hearts': session['hearts']
+    }, broadcast=True)
     advance_turn()
     broadcast_state()
 
 @socketio.on('kick_all_except_me')
 def handle_kick_all():
+    global TURN_TIMER
     sid = request.sid
     session = session_manager.get_by_sid(sid)
     if not session:
@@ -335,10 +341,16 @@ def handle_kick_all():
     game_state['claimed'] = {}
     game_state['player_order'] = [session['player_id']]
     game_state['current_turn_idx'] = 0
+    game_state['turn_start_time'] = None
     session['hearts'] = 3
+    
+    if TURN_TIMER:
+        TURN_TIMER.cancel()
+        TURN_TIMER = None
     
     emit('kicked_all', {'message': 'ไล่ทุกคนออกแล้ว! เริ่มเกมใหม่'}, broadcast=True)
     broadcast_state()
+    start_turn_timer()
     logger.info('First player kicked everyone else')
 
 @socketio.on('request_reset')
@@ -347,12 +359,14 @@ def handle_request_reset():
     session = session_manager.get_by_sid(sid)
     if not session:
         return
-    total_players = len(session_manager.get_all_sessions())
-    if total_players >= 2:
-        msg = reset_bingo('ไม่เอาอะรีดีกว่า ;DDDDDDDD')
-        emit('game_over', {'message': msg}, broadcast=True)
-        broadcast_state()
-        logger.info('Game manually reset by %s', session['player_id'])
+    # Clear previous votes
+    reset_votes.clear()
+    no_reset_votes.clear()
+    # Show voting modal to all players
+    emit('show_reset_vote', {
+        'requester': session['name']
+    }, broadcast=True)
+    logger.info('Reset vote requested by %s', session['player_id'])
 
 
 @socketio.on('request_full_state')
@@ -367,6 +381,7 @@ def handle_request_full_state():
     })
 
 reset_votes = {}
+no_reset_votes = {}
 
 @socketio.on('vote_reset_game')
 def handle_vote_reset():
@@ -376,18 +391,69 @@ def handle_vote_reset():
         return
     
     total_players = len(session_manager.get_all_sessions())
+    
+    # Check if already voted no, remove if so
+    if session['player_id'] in no_reset_votes:
+        del no_reset_votes[session['player_id']]
+    
     if session['player_id'] not in reset_votes:
         reset_votes[session['player_id']] = True
     
     vote_count = len(reset_votes)
-    emit('reset_vote_update', {'votes': vote_count, 'total': total_players}, broadcast=True)
+    no_vote_count = len(no_reset_votes)
+    emit('reset_vote_update', {
+        'votes': vote_count, 
+        'total': total_players,
+        'no_votes': no_vote_count
+    }, broadcast=True)
     
+    # Reset passes if more than half vote yes
     if total_players > 1 and vote_count > total_players // 2:
         msg = reset_bingo('ไม่เอาอะรีดีกว่า ;DDDDDDDD')
         emit('game_over', {'message': msg}, broadcast=True)
         reset_votes.clear()
+        no_reset_votes.clear()
         broadcast_state()
+        start_turn_timer()
         logger.info('Game reset by vote: %s/%s', vote_count, total_players)
+    # Reset fails if more than half vote no
+    elif total_players > 1 and no_vote_count > total_players // 2:
+        emit('reset_failed', {'message': 'ไม่รีแล้ว!'}, broadcast=True)
+        reset_votes.clear()
+        no_reset_votes.clear()
+        logger.info('Reset failed: %s/%s voted no', no_vote_count, total_players)
+
+
+@socketio.on('vote_no_reset')
+def handle_vote_no_reset():
+    sid = request.sid
+    session = session_manager.get_by_sid(sid)
+    if not session:
+        return
+    
+    total_players = len(session_manager.get_all_sessions())
+    
+    # Check if already voted yes, remove if so
+    if session['player_id'] in reset_votes:
+        del reset_votes[session['player_id']]
+    
+    if session['player_id'] not in no_reset_votes:
+        no_reset_votes[session['player_id']] = True
+    
+    vote_count = len(reset_votes)
+    no_vote_count = len(no_reset_votes)
+    emit('reset_vote_update', {
+        'votes': vote_count, 
+        'total': total_players,
+        'no_votes': no_vote_count
+    }, broadcast=True)
+    
+    # Reset fails if more than half vote no
+    if total_players > 1 and no_vote_count > total_players // 2:
+        emit('reset_failed', {'message': 'ไม่รีแล้ว!'}, broadcast=True)
+        reset_votes.clear()
+        no_reset_votes.clear()
+        logger.info('Reset rejected: %s/%s voted no', no_vote_count, total_players)
 
 
 def get_current_player_id():
@@ -425,6 +491,8 @@ def on_turn_timeout():
     
     TURN_TIMER = None
     advance_turn()
+    # Note: advance_turn already calls start_turn_timer at the end
+    # Broadcast the updated state with new timer
     broadcast_state()
     emit('turn_timeout', {'player_id': current_player_id}, broadcast=True)
 
@@ -503,10 +571,16 @@ def broadcast_state():
 
 
 def reset_bingo(message='ไม่เอาอะรีดีกว่า ;DDDDDDDD'):
-    global game_state
+    global game_state, TURN_TIMER
     game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics()
     game_state['claimed'] = {}
     game_state['current_turn_idx'] = 0
+    game_state['turn_start_time'] = None
+    
+    # Cancel existing timer
+    if TURN_TIMER:
+        TURN_TIMER.cancel()
+        TURN_TIMER = None
     
     # Reset hearts: ALL players get 3 hearts
     all_sessions = session_manager.get_all_sessions()
@@ -517,31 +591,88 @@ def reset_bingo(message='ไม่เอาอะรีดีกว่า ;DDDDD
             session['hearts'] = 3
             logger.info('Bingo reset: %s hearts set to 3', player_id)
     
+    # Shuffle player order randomly
+    if game_state['player_order']:
+        random.shuffle(game_state['player_order'])
+        game_state['current_turn_idx'] = 0
+        logger.info('Bingo reset: player order shuffled')
+    
     logger.info('Bingo reset: new headers generated, all players revived with 3 hearts')
     return message
 
 
 def check_win_condition():
     # Check if any player has completed a bingo (5 in a row/col/diagonal)
-    # For simplicity, check if all slots are claimed
-    if len(game_state['claimed']) >= 25:
-        # Find winner by points
-        all_sessions = session_manager.get_all_sessions()
-        if not all_sessions:
-            return
-            
-        max_points = max([s.get('points', 0) for s in all_sessions.values()])
-        winners = [s for s in all_sessions.values() if s.get('points', 0) == max_points]
+    bingo_lines = []
+    
+    # Rows
+    for r in range(5):
+        row = [f"{r}-{c}" for c in range(5)]
+        if all(s in game_state['claimed'] for s in row):
+            bingo_lines.append(row)
+    
+    # Columns
+    for c in range(5):
+        col = [f"{r}-{c}" for r in range(5)]
+        if all(s in game_state['claimed'] for s in col):
+            bingo_lines.append(col)
+    
+    # Diagonals
+    diag1 = [f"{i}-{i}" for i in range(5)]
+    diag2 = [f"{i}-{4-i}" for i in range(5)]
+    if all(s in game_state['claimed'] for s in diag1):
+        bingo_lines.append(diag1)
+    if all(s in game_state['claimed'] for s in diag2):
+        bingo_lines.append(diag2)
+    
+    # If there's a bingo, trigger win with 10 second dispute timer
+    if bingo_lines:
+        logger.info('Bingo detected! Lines: %s', bingo_lines)
         
-        if len(winners) > 1:
-            winner_msg = 'ว่าหาผลสรุปไม่ได้ ;D'
-        else:
-            winners[0]['points'] = winners[0].get('points', 0) + 1
-            winner_msg = f'ผู้ชนะคือ {winners[0]["name"]}! (+1 แต้ม)'
+        # Find who placed the last character (the one that completed bingo)
+        last_slot = list(game_state['claimed'].keys())[-1]
+        last_player_id = game_state['claimed'][last_slot]['player_id']
         
-        msg = reset_bingo(winner_msg)
-        emit('game_over', {'message': winner_msg}, broadcast=True)
-        logger.info('Bingo reset due to game win: %s', winner_msg)
+        # Emit bingo detected event with countdown
+        emit('bingo_detected', {
+            'lines': bingo_lines,
+            'last_player_id': last_player_id,
+            'countdown': 10,
+        }, broadcast=True)
+        
+        # Start 10 second countdown
+        import threading
+        bingo_timer = threading.Timer(10, lambda: finalize_win(bingo_lines))
+        bingo_timer.daemon = True
+        bingo_timer.start()
+        
+        # Store bingo timer reference
+        game_state['bingo_timer'] = bingo_timer
+
+
+def finalize_win(bingo_lines):
+    # Remove bingo timer reference
+    game_state.pop('bingo_timer', None)
+    
+    # Find winner by points
+    all_sessions = session_manager.get_all_sessions()
+    if not all_sessions:
+        return
+        
+    max_points = max([s.get('points', 0) for s in all_sessions.values()])
+    winners = [s for s in all_sessions.values() if s.get('points', 0) == max_points]
+    
+    if len(winners) > 1:
+        winner_msg = 'ว่าหาผลสรุปไม่ได้ ;D'
+    else:
+        winners[0]['points'] = winners[0].get('points', 0) + 1
+        winner_msg = f'ผู้ชนะคือ {winners[0]["name"]}! (+1 แต้ม)'
+    
+    msg = reset_bingo(winner_msg)
+    emit('game_over', {'message': winner_msg, 'lines': bingo_lines}, broadcast=True)
+    broadcast_state()
+    start_turn_timer()
+    logger.info('Bingo finalized: %s', winner_msg)
 
 
 def check_tie_condition():
@@ -551,6 +682,8 @@ def check_tie_condition():
     if active_sessions and all(s['hearts'] <= 0 for s in active_sessions):
         msg = reset_bingo('ว่าหาผลสรุปไม่ได้ ;D')
         emit('game_over', {'message': msg}, broadcast=True)
+        broadcast_state()
+        start_turn_timer()
         logger.info('Bingo reset due to tie')
 
 

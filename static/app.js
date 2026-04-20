@@ -8,183 +8,95 @@ let currentTemp = null;
 let playerColor = "";
 let cols = [];
 let rows = [];
+let reset_votes = {};
+let no_reset_votes = {};
+
+// Additional state
+let localPlayerId = null;
+let claimed = {};
+let usernameInput = null;
+
+// Load saved player info from localStorage
+try {
+    const savedName = localStorage.getItem('animeBingoPlayerName');
+    const savedId = localStorage.getItem('animeBingoPlayerId');
+    if (savedName) {
+        myName = savedName;
+        localPlayerId = savedId;
+    }
+} catch (e) {}
 
 socket.on('reset_vote_update', (data) => {
-    const voteRow = document.getElementById('resetVoteRow');
-    const voteCount = document.getElementById('resetVoteCount');
-    if (voteRow && voteCount) {
-        voteRow.style.display = 'flex';
-        voteCount.textContent = `${data.votes}/${data.total}`;
+    const voteInfo = document.getElementById('resetVoteInfo');
+    if (voteInfo) {
+        const noVotes = data.no_votes || 0;
+        voteInfo.innerHTML = `โหวตรี: <strong style="color:#2ecc71;">${data.votes}/${data.total}</strong> | ไม่รี: <strong style="color:#e74c3c;">${noVotes}</strong>`;
+    }
+    // Show modal if not shown
+    const resetModal = document.getElementById('resetModal');
+    if (resetModal && !resetModal.classList.contains('active')) {
+        resetModal.classList.add('active');
     }
 });
 
-const localPlayerId = localStorage.getItem('animeBingoPlayerId');
-const storedName = localStorage.getItem('animeBingoPlayerName');
-function createPersistentId() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    return `player-${Math.random().toString(36).substring(2, 10)}-${Date.now().toString(36)}`;
-}
-myPlayerId = localPlayerId || createPersistentId();
-myName = storedName || '';
-
-const loginOverlay = document.getElementById('loginOverlay');
-const usernameInput = document.getElementById('username');
-usernameInput.value = myName;
-
-function setLoginVisible(visible) {
-    loginOverlay.style.display = visible ? 'flex' : 'none';
-}
-
-function enterGame() {
-    const name = document.getElementById('username').value.trim();
-    if (!name) {
-        usernameInput.focus();
-        return;
-    }
-    myName = name;
-    localStorage.setItem('animeBingoPlayerId', myPlayerId);
-    localStorage.setItem('animeBingoPlayerName', myName);
-    socket.emit('join_game', { player_id: myPlayerId, name: myName });
-    setLoginVisible(false);
-}
-
-socket.on('connect', () => {
-    console.debug('[client] connected', socket.id);
-    if (myName && localPlayerId) {
-        socket.emit('join_game', { player_id: myPlayerId, name: myName });
-        setLoginVisible(false);
-    }
-});
-
-socket.on('session_ready', (data) => {
-    console.log('[client] session_ready', data);
-    console.log('[client] col_headers:', data.col_headers);
-    console.log('[client] row_headers:', data.row_headers);
-    myPlayerId = data.player_id;
-    myName = data.player.name;
-    myPoints = data.player.points || 0;
-    myIsFirst = data.player.is_first || false;
-    playerColor = data.player.color;
-    cols = data.col_headers || [];
-    rows = data.row_headers || [];
-    localStorage.setItem('animeBingoPlayerId', myPlayerId);
-    localStorage.setItem('animeBingoPlayerName', myName);
-    buildGrid(data.claimed);
-    updateGameState(data.state);
+socket.on('show_reset_vote', (data) => {
+    // Clear any previous vote counts
+    reset_votes = {};
+    no_reset_votes = {};
     
-    // Initialize timer from server state
-    if (data.turn_start_time) {
-        startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
+    // Show the voting modal
+    const resetModal = document.getElementById('resetModal');
+    const voteInfo = document.getElementById('resetVoteInfo');
+    if (resetModal) {
+        resetModal.classList.add('active');
     }
-    
-    if (myIsFirst) {
-        document.getElementById('kickAll').style.display = 'block';
-    } else {
-        document.getElementById('kickAll').style.display = 'none';
-    }
-});
-
-socket.on('session_error', (data) => {
-    console.error('[client] session error', data?.message);
-    alert(data?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ');
-    setLoginVisible(true);
-});
-
-socket.on('player_moving', (data) => {
-    document.querySelectorAll('.cell.drop-zone').forEach(c => {
-        c.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
-        c.style.borderColor = '#333';
-        c.draggable = false;
-    });
-    if (data) {
-        const cell = document.getElementById(`cell-${data.slot_id}`);
-        if (cell) {
-            cell.innerHTML = `<img src="${data.img}">`;
-            cell.style.borderColor = data.color;
-            cell.style.borderStyle = 'solid';
-        }
+    if (voteInfo) {
+        voteInfo.innerHTML = 'รอการโหวต...';
     }
 });
 
-socket.on('slot_locked', (data) => {
-    const cell = document.getElementById(`cell-${data.slot_id}`);
-    if (cell) {
-        setLockedCell(cell, data, data.slot_id);
+socket.on('reset_failed', (data) => {
+    const resetModal = document.getElementById('resetModal');
+    if (resetModal) {
+        resetModal.classList.remove('active');
     }
-    if (myPlayerId === data.player_id) {
-        currentTemp = null;
-        document.getElementById('confirm').disabled = true;
-    }
-    // Request fresh state to sync everything including timer
-    socket.emit('request_full_state');
-});
-
-socket.on('dispute_update', (data) => {
-    const badge = document.getElementById(`dispute-${data.slot_id}`);
-    if (badge) {
-        badge.textContent = `ค้าน ${data.count}`;
-        badge.style.display = 'block';
-    }
-});
-
-socket.on('update_game_state', (data) => {
-    updateGameState(data);
-});
-
-socket.on('dispute_update', (data) => {
-    const badge = document.getElementById(`dispute-${data.slot_id}`);
-    if (badge) {
-        badge.textContent = `ค้าน ${data.count}`;
-        badge.style.display = data.count > 0 ? 'block' : 'none';
-    }
-});
-
-socket.on('slot_removed', (data) => {
-    const cell = document.getElementById(`cell-${data.slot_id}`);
-    if (cell) {
-        cell.className = 'cell drop-zone';
-        cell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
-        cell.style.borderColor = '';
-        cell.style.boxShadow = '';
-        cell.onclick = null;
-    }
-    // Request fresh state after slot removed
-    socket.emit('request_full_state');
-});
-
-socket.on('reload_page', (data) => {
-    console.log('[client] reload_page:', data.action);
-    // Don't reload the page - just rebuild the grid from server state
-    socket.emit('request_full_state');
-});
-
-socket.on('full_state', (data) => {
-    console.log('[client] full_state received:', data);
-    cols = data.col_headers || [];
-    rows = data.row_headers || [];
-    buildGrid(data.claimed);
-    updateGameState(data.state);
-    
-    // Initialize timer from server state
-    if (data.turn_start_time) {
-        startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
-    }
-});
-
-socket.on('game_over', (data) => {
-    console.log('[client] game_over:', data.message);
+    // Show notification
     showGameOverPopup(data.message);
-    // Request fresh state after game over (reset)
+});
+
+socket.on('game_reset', (data) => {
+    console.log('[client] game_reset:', data.message);
+    showResetPopup();
     socket.emit('request_full_state');
 });
 
-socket.on('turn_timeout', (data) => {
-    console.log('[client] turn_timeout:', data);
-    // Request fresh state after timeout
+socket.on('player_skipped', (data) => {
+    console.log('[client] player_skipped:', data);
+    showSkipPopup(data.player_name, data.hearts);
     socket.emit('request_full_state');
 });
+
+function showResetPopup() {
+    const modal = document.getElementById('resetModal');
+    if (modal) {
+        modal.classList.add('active');
+        setTimeout(() => {
+            modal.classList.remove('active');
+        }, 3000);
+    }
+}
+
+function showSkipPopup(playerName, hearts) {
+    const modal = document.getElementById('skipModal');
+    const text = document.getElementById('skipText');
+    if (modal && text) {
+        text.innerHTML = `ผู้เล่น <strong style="color:#f1c40f;">${playerName}</strong> -1 หัวใจ<br>เหลือหัวใจ: ${'❤️'.repeat(hearts)}`;
+        modal.classList.add('active');
+        setTimeout(() => {
+            modal.classList.remove('active');
+        }, 3000);
+    }
+}
 
 function showGameOverPopup(message) {
     const modal = document.getElementById('gameOverModal');
@@ -204,6 +116,137 @@ socket.on('connect_error', (error) => {
 
 socket.on('disconnect', (reason) => {
     console.warn('[client] disconnected', reason);
+});
+
+// Connection management
+socket.on('connect', () => {
+    console.log('[client] connected');
+    // Only auto-join if we have stored credentials
+    if (localPlayerId || myName) {
+        const payload = { name: myName || 'Player' };
+        if (myPlayerId) {
+            payload.player_id = myPlayerId;
+        } else if (localPlayerId) {
+            payload.player_id = localPlayerId;
+        }
+        socket.emit('join_game', payload);
+    }
+});
+
+socket.on('session_ready', (data) => {
+    console.log('[client] session_ready', data);
+    myPlayerId = data.player_id;
+    myName = data.player.name;
+    playerColor = data.player.color;
+    myPoints = data.player.points || 0;
+    myIsFirst = data.player.is_first || false;
+
+    // Save for reconnection
+    try {
+        localStorage.setItem('animeBingoPlayerId', myPlayerId);
+        localStorage.setItem('animeBingoPlayerName', myName);
+    } catch (e) {}
+
+    localPlayerId = myPlayerId;
+    cols = data.col_headers || [];
+    rows = data.row_headers || [];
+    claimed = data.claimed || {};
+
+    updateGameState(data.state);
+    buildGrid(claimed);
+    setLoginVisible(false);
+
+    if (data.reconnect) {
+        showGameOverPopup('กลับมาได้แล้ว!');
+    }
+
+    if (data.turn_start_time) {
+        startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
+    } else {
+        stopTimer();
+    }
+});
+
+socket.on('update_game_state', updateGameState);
+
+socket.on('slot_locked', (data) => {
+    claimed[data.slot_id] = {
+        img: data.img,
+        name: data.name,
+        anime: data.anime || '',
+        player_id: data.player_id,
+        color: data.color,
+        disputes: []
+    };
+    buildGrid(claimed);
+});
+
+socket.on('dispute_update', (data) => {
+    const slot = claimed[data.slot_id];
+    if (slot) {
+        slot.disputes = new Array(data.count);
+        const cell = document.getElementById(`cell-${data.slot_id}`);
+        if (cell) {
+            const badge = cell.querySelector('.dispute-badge');
+            if (badge) {
+                badge.textContent = `ค้าน ${data.count}`;
+                badge.style.display = data.count > 0 ? 'block' : 'none';
+            } else {
+                setLockedCell(cell, slot, data.slot_id);
+    }
+
+    // Clear temporary selection if it's no longer our turn
+    if (turnPlayerId !== myPlayerId && currentTemp) {
+        currentTemp = null;
+        const confirmBtn = document.getElementById('confirm');
+        if (confirmBtn) confirmBtn.disabled = true;
+    }
+}
+    }
+});
+
+socket.on('slot_removed', (data) => {
+    delete claimed[data.slot_id];
+    buildGrid(claimed);
+});
+
+socket.on('game_over', (data) => {
+    showGameOverPopup(data.message);
+});
+
+socket.on('kicked_all', (data) => {
+    showGameOverPopup(data.message);
+    localStorage.removeItem('animeBingoPlayerId');
+    localStorage.removeItem('animeBingoPlayerName');
+    myPlayerId = null;
+    localPlayerId = null;
+    myName = null;
+    setLoginVisible(true);
+});
+
+socket.on('session_error', (data) => {
+    alert('Error: ' + data.message);
+});
+
+socket.on('full_state', (data) => {
+    cols = data.col_headers || cols;
+    rows = data.row_headers || rows;
+    claimed = data.claimed || claimed;
+    updateGameState(data.state);
+    if (data.turn_start_time) {
+        startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
+    } else {
+        stopTimer();
+    }
+    buildGrid(claimed);
+});
+
+socket.on('turn_timeout', (data) => {
+    console.log('[client] turn_timeout', data);
+});
+
+socket.on('player_moving', (data) => {
+    // Optional: visual feedback for other players' moves
 });
 
 function buildGrid(claimed) {
@@ -398,6 +441,17 @@ function updateTimerDisplay() {
     }
 }
 
+function stopTimer() {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+    turnStartTime = null;
+    turnDuration = 120;
+    const timerEl = document.getElementById('timerValue');
+    if (timerEl) timerEl.textContent = '2:00';
+}
+
 function updateGameState(data) {
     turnPlayerId = data.order[data.turn] || null;
     playerColor = data.players?.[myPlayerId]?.color || playerColor;
@@ -464,10 +518,21 @@ function updateGameState(data) {
     if (turnPlayerId && data.turn_start_time) {
         startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
     }
+
+    // Clear temporary selection if it's no longer our turn
+    if (turnPlayerId !== myPlayerId && currentTemp) {
+        currentTemp = null;
+        const confirmBtn = document.getElementById('confirm');
+        if (confirmBtn) confirmBtn.disabled = true;
+    }
 }
 
 let searchTimeout = null;
 function onSearch() {
+    // Show anime section when typing
+    document.getElementById('animeSection').style.display = 'block';
+    document.getElementById('charSection').style.display = 'none';
+    
     clearTimeout(searchTimeout);
     searchTimeout = window.setTimeout(async () => {
         const query = document.getElementById('search').value.trim();
@@ -512,16 +577,44 @@ function renderAnimeResults(items) {
 }
 
 let currentAnimeTitle = '';
+let currentAnimeId = null;
+let allCharacters = [];
 
 async function getChars(animeId, animeTitle) {
     currentAnimeTitle = animeTitle;
+    currentAnimeId = animeId;
     try {
         const response = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/characters`);
         const payload = await response.json();
-        renderCharacterResults(payload.data || [], animeTitle);
+        allCharacters = payload.data || [];
+        
+        // Hide anime section, show character section
+        document.getElementById('animeSection').style.display = 'none';
+        document.getElementById('charSection').style.display = 'block';
+        document.getElementById('charSearch').value = '';
+        
+        renderCharacterResults(allCharacters, animeTitle);
     } catch (error) {
         console.error('[search] character fetch failed', error);
     }
+}
+
+function onCharSearch() {
+    const query = document.getElementById('charSearch').value.trim().toLowerCase();
+    const container = document.getElementById('charResults');
+    const count = document.getElementById('charCount');
+    
+    if (!query) {
+        renderCharacterResults(allCharacters, currentAnimeTitle);
+        return;
+    }
+    
+    const filtered = allCharacters.filter(item => 
+        item.character.name.toLowerCase().includes(query)
+    );
+    
+    renderCharacterResults(filtered, currentAnimeTitle);
+    count.textContent = filtered.length;
 }
 
 function renderCharacterResults(characters, animeTitle) {
@@ -580,14 +673,63 @@ function closeConfirm() {
     document.getElementById('confirmModal').classList.remove('active');
 }
 
+function setLoginVisible(visible) {
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) {
+        overlay.style.display = visible ? 'flex' : 'none';
+    }
+}
+
+function enterGame() {
+    const input = document.getElementById('username');
+    const name = input ? input.value.trim() : '';
+    if (!name) {
+        alert('กรุณาระบุชื่อ');
+        return;
+    }
+    const payload = { name };
+    if (myPlayerId) {
+        payload.player_id = myPlayerId;
+    } else if (localPlayerId) {
+        payload.player_id = localPlayerId;
+    }
+    socket.emit('join_game', payload);
+    myName = name;
+    try {
+        localStorage.setItem('animeBingoPlayerName', name);
+    } catch (e) {}
+}
+
+function dismissBingoDispute() {
+    const modal = document.getElementById('bingoModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
 window.enterGame = enterGame;
 window.showConfirmModal = showConfirmModal;
 window.submitMove = submitMove;
 window.closeConfirm = closeConfirm;
 window.onSearch = onSearch;
+window.onCharSearch = onCharSearch;
+window.dismissBingoDispute = dismissBingoDispute;
+window.closeSkipModal = closeSkipModal;
+window.closeResetModal = closeResetModal;
+window.closeCharDetail = closeCharDetail;
+
+function closeSkipModal() {
+    document.getElementById('skipModal').classList.remove('active');
+}
+
+function closeResetModal() {
+    document.getElementById('resetModal').classList.remove('active');
+}
 
 window.addEventListener('DOMContentLoaded', () => {
-    if (myName && localPlayerId) {
+    usernameInput = document.getElementById('username');
+    if (!usernameInput) return;
+    if (myName) {
         usernameInput.value = myName;
     }
     if (!myName) {
