@@ -114,7 +114,7 @@ TOPICS_TOP = [
     'มีภารกิจหลัก', 'มีระบบกิลด์'
 ]
 event_bus = EventBus()
-session_manager = PlayerSessionManager(disconnect_timeout=10, event_bus=event_bus)
+session_manager = PlayerSessionManager(disconnect_timeout=120, event_bus=event_bus)
 
 game_state = {
     'col_headers': random.sample(TOPICS_TOP, 5),
@@ -400,12 +400,16 @@ def reset_bingo(message='ไม่เอาอะรีดีกว่า ;DDDDD
     game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics()
     game_state['claimed'] = {}
     game_state['current_turn_idx'] = 0
+    
     # Reset hearts: ALL players get 3 hearts
     all_sessions = session_manager.get_all_sessions()
     logger.info('Bingo reset: found %s sessions before reset', len(all_sessions))
-    for player_id, session in all_sessions.items():
-        session['hearts'] = 3
-        logger.info('Bingo reset: %s hearts set to 3', player_id)
+    for player_id in list(all_sessions.keys()):
+        session = session_manager.get_by_player_id(player_id)
+        if session:
+            session['hearts'] = 3
+            logger.info('Bingo reset: %s hearts set to 3', player_id)
+    
     logger.info('Bingo reset: new headers generated, all players revived with 3 hearts')
     return message
 

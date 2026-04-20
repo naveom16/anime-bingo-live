@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 class PlayerSessionManager:
-    def __init__(self, disconnect_timeout: int = 10, event_bus: Any = None) -> None:
+    def __init__(self, disconnect_timeout: int = 120, event_bus: Any = None) -> None:
         self.disconnect_timeout = disconnect_timeout
         self.event_bus = event_bus
         self.sessions: Dict[str, Dict[str, Any]] = {}
