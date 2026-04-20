@@ -153,12 +153,22 @@ socket.on('reload_page', (data) => {
     }, 500);
 });
 
-socket.on('bingo_reset', (data) => {
-    console.log('Bingo reset:', data.reason);
-    alert('Bingo ใหม่ถูกสร้างแล้ว! เหตุผล: ' + data.reason);
-    // Optionally reload or update UI
-    location.reload(); // Simple reload for now
+socket.on('game_over', (data) => {
+    console.log('[client] game_over:', data.message);
+    showGameOverPopup(data.message);
 });
+
+function showGameOverPopup(message) {
+    const modal = document.getElementById('gameOverModal');
+    const text = document.getElementById('gameOverText');
+    if (modal && text) {
+        text.textContent = message;
+        modal.classList.add('active');
+        setTimeout(() => {
+            modal.classList.remove('active');
+        }, 5000);
+    }
+}
 
 socket.on('connect_error', (error) => {
     console.error('[client] connect_error', error);

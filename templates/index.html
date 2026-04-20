@@ -81,6 +81,16 @@
         </div>
     </div>
 
+    <div id="gameOverModal" class="modal">
+        <div class="modal-box panel-card">
+            <h2>ผลเกม</h2>
+            <p id="gameOverText" style="font-size:1.3rem;font-weight:700;color:#fff;text-align:center;"></p>
+            <div class="action-row">
+                <button onclick="document.getElementById('gameOverModal').classList.remove('active')" class="btn-confirm">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

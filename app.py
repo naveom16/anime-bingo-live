@@ -18,13 +18,101 @@ socketio = SocketIO(app, cors_allowed_origins='*', ping_timeout=60, ping_interva
 PLAYER_COLORS = [
     '#FF4757', '#2ED573', '#1E90FF', '#ECCC68', '#A55EEA', '#FFA502', '#70A1FF', '#7BED9F'
 ]
+
+# Conflict topics to prevent overlapping
+TOPIC_CONFLICTS = {
+    'เป็นฮีโร่': ['เป็นตัวร้าย'],
+    'เป็นนักเรียน': ['เป็นครู'],
+    'เป็นทหาร': ['เป็นโจร'],
+    'เป็นครึ่งมนุษย์': ['เป็นสัตว์'],
+    'มีพลังออร่ารอบตัว': ['มีรอยเรืองแสง'],
+}
+
+def get_non_conflicting_topics():
+    available_top = list(TOPICS_TOP)
+    available_side = list(TOPICS_SIDE)
+    
+    selected_top = []
+    selected_side = []
+    
+    while len(selected_top) < 5 and available_top:
+        topic = random.choice(available_top)
+        available_top.remove(topic)
+        
+        # Check conflicts
+        conflicts = TOPIC_CONFLICTS.get(topic, [])
+        can_add = True
+        for selected in selected_top:
+            if selected in conflicts:
+                can_add = False
+                break
+        
+        if can_add:
+            selected_top.append(topic)
+    
+    while len(selected_side) < 5 and available_side:
+        topic = random.choice(available_side)
+        available_side.remove(topic)
+        
+        # Check conflicts with already selected top
+        can_add = True
+        for selected in selected_top:
+            if selected in TOPIC_CONFLICTS.get(topic, []):
+                can_add = False
+                break
+        
+        if can_add:
+            selected_side.append(topic)
+    
+    return selected_top, selected_side
 TOPICS_SIDE = [
-    'ค่าย MAPPA', 'ค่าย Ufotable', 'ผมขาว', 'ผมแดง', 'ใส่หน้ากาก', 'ผมทอง', 'ตัวเอก', 'ต่างโลก'
+    'ผมดำ', 'ผมฟ้า', 'ผมม่วง', 'ผมเขียว', 'ผมชมพู',
+    'ตาสีแดง', 'ตาสีทอง', 'ตาสองสี', 'ตาปิดข้างเดียว',
+    'ใส่ผ้าปิดตา', 'ใส่หูฟัง', 'ใส่ถุงมือ', 'ใส่รองเท้าบูท',
+    'ใส่ชุดเกราะ', 'ใส่สูท', 'ใส่ชุดแฟนตาซี',
+    'ตัวสูง', 'ตัวเตี้ย', 'กล้าม', 'ผอม',
+    'มีเขา', 'มีปีก', 'มีหาง', 'มีเขี้ยว',
+    'มีรอยสัก', 'มีแผลเป็นบนหน้า', 'มีแผลเป็นตามตัว',
+    'ใส่แว่นกันแดด', 'ใส่หมวกคลุม', 'ใส่ฮู้ด',
+    'ถือดาบใหญ่', 'ถือปืนคู่', 'ถือคทา', 'ถือโล่',
+    'ใช้ธนู', 'ใช้มีด', 'ใช้เคียว',
+    'มีสัตว์เลี้ยง', 'มีมาสคอต', 'มีหุ่นยนต์คู่หู',
+    'ใส่เครื่องแบบทหาร', 'ใส่ชุดนักเรียนหญิง', 'ใส่ชุดนักเรียนชาย',
+    'ใส่ชุดแม่บ้าน', 'ใส่ชุดไอดอล',
+    'มีพลังออร่ารอบตัว', 'มีรอยเรืองแสง',
+    'มีเสียงพูดแปลก', 'ไม่พูด', 'พูดน้อย',
+    'ยิ้มตลอด', 'หน้าตาย', 'ดูน่ากลัว',
+    'เด็ก', 'วัยรุ่น', 'ผู้ใหญ่',
+    'เป็นสัตว์', 'เป็นครึ่งมนุษย์',
+    'มีร่างแปลง', 'มีหลายร่าง'
 ]
 TOPICS_TOP = [
-    'เป็นโจรสลัด', 'ใช้ดาบ', 'พลังไฟ', 'ตลก', 'ตายตอนจบ', 'เก่งเกินไป', 'ใส่หมวก', 'นินจา'
+    'เป็นฮีโร่', 'เป็นตัวร้าย', 'เป็นแอนตี้ฮีโร่',
+    'เป็นทหาร', 'เป็นตำรวจ', 'เป็นสายลับ',
+    'เป็นนักล่า', 'เป็นนักผจญภัย',
+    'เป็นราชา', 'เป็นเจ้าหญิง', 'เป็นขุนนาง',
+    'เป็นนักเวท', 'เป็นนักดาบ', 'เป็นนักธนู',
+    'เป็นครู', 'เป็นนักเรียน', 'เป็นอาจารย์',
+    'เป็นนักวิจัย', 'เป็นหมอ',
+    'เป็นนักฆ่า', 'เป็นโจร', 'เป็นนักลอบสังหาร',
+    'อยู่ในโลกอนาคต', 'อยู่ในโลกแฟนตาซี', 'อยู่ในโลกปัจจุบัน',
+    'มีระบบเกม', 'เลเวลอัปได้',
+    'เกิดใหม่', 'ย้อนเวลา', 'ข้ามโลก',
+    'มีสงคราม', 'มีการเมือง', 'มีองค์กรลับ',
+    'มีโรงเรียนเวทมนตร์', 'มีโรงเรียนต่อสู้',
+    'ต่อสู้กับปีศาจ', 'ต่อสู้กับเอเลี่ยน', 'ต่อสู้กับมนุษย์',
+    'มีพลังมืด', 'มีพลังแสง', 'มีพลังน้ำ', 'มีพลังสายฟ้า',
+    'ควบคุมเวลา', 'ควบคุมความคิด',
+    'มีคำสาป', 'มีพรสวรรค์พิเศษ',
+    'มีความลับ', 'มีอดีตมืดมน',
+    'มีเพื่อนร่วมทีม', 'ทำงานคนเดียว',
+    'มีการทรยศ', 'มีการแก้แค้น',
+    'มีความรัก', 'มีดราม่า',
+    'มีการแข่งขัน', 'มีทัวร์นาเมนต์',
+    'มีสัตว์อสูร', 'มีมังกร',
+    'ต้องเอาชีวิตรอด', 'โลกกำลังล่มสลาย',
+    'มีภารกิจหลัก', 'มีระบบกิลด์'
 ]
-
 event_bus = EventBus()
 session_manager = PlayerSessionManager(disconnect_timeout=10, event_bus=event_bus)
 
@@ -189,8 +277,8 @@ def handle_request_reset():
         return
     total_players = len(session_manager.get_all_sessions())
     if total_players >= 2:
-        reset_bingo()
-        emit('bingo_reset', {'reason': 'manual_reset', 'reset_by': session['player_id']}, broadcast=True)
+        msg = reset_bingo('ไม่เอาอะรีดีกว่า ;DDDDDDDD')
+        emit('game_over', {'message': msg}, broadcast=True)
         broadcast_state()
         logger.info('Game manually reset by %s', session['player_id'])
 
@@ -211,8 +299,8 @@ def handle_vote_reset():
     emit('reset_vote_update', {'votes': vote_count, 'total': total_players}, broadcast=True)
     
     if total_players > 1 and vote_count > total_players // 2:
-        reset_bingo()
-        emit('bingo_reset', {'reason': 'vote_reset', 'votes': vote_count}, broadcast=True)
+        msg = reset_bingo('ไม่เอาอะรีดีกว่า ;DDDDDDDD')
+        emit('game_over', {'message': msg}, broadcast=True)
         reset_votes.clear()
         broadcast_state()
         logger.info('Game reset by vote: %s/%s', vote_count, total_players)
@@ -259,25 +347,38 @@ def broadcast_state():
     event_bus.publish('state_updated', state=payload)
 
 
-def reset_bingo():
+def reset_bingo(message='ไม่เอาอะรีดีกว่า ;DDDDDDDD'):
     global game_state
-    game_state['col_headers'] = random.sample(TOPICS_TOP, 5)
-    game_state['row_headers'] = random.sample(TOPICS_SIDE, 5)
+    game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics()
     game_state['claimed'] = {}
     game_state['current_turn_idx'] = 0
     # Reset hearts: ALL players get 3 hearts
-    for session in session_manager.get_all_sessions().values():
+    all_sessions = session_manager.get_all_sessions()
+    logger.info('Bingo reset: found %s sessions before reset', len(all_sessions))
+    for player_id, session in all_sessions.items():
         session['hearts'] = 3
+        logger.info('Bingo reset: %s hearts set to 3', player_id)
     logger.info('Bingo reset: new headers generated, all players revived with 3 hearts')
+    return message
 
 
 def check_win_condition():
     # Check if any player has completed a bingo (5 in a row/col/diagonal)
     # For simplicity, check if all slots are claimed
     if len(game_state['claimed']) >= 25:
-        reset_bingo()
-        emit('bingo_reset', {'reason': 'game_win'}, broadcast=True)
-        logger.info('Bingo reset due to game win')
+        # Find winner
+        all_sessions = session_manager.get_all_sessions()
+        max_hearts = max([s['hearts'] for s in all_sessions.values()]) if all_sessions else 0
+        winners = [s['name'] for s in all_sessions.values() if s['hearts'] == max_hearts]
+        
+        if len(winners) > 1:
+            winner_msg = 'ว่าหาผลสรุปไม่ได้ ;D'
+        else:
+            winner_msg = f'ผู้ชนะคือ {winners[0]}!'
+        
+        reset_bingo(winner_msg)
+        emit('game_over', {'message': winner_msg}, broadcast=True)
+        logger.info('Bingo reset due to game win: %s', winner_msg)
 
 
 def check_tie_condition():
