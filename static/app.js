@@ -5,6 +5,7 @@ let myPoints = 0;
 let myIsFirst = false;
 let turnPlayerId = null;
 let currentTemp = null;
+let previewSlot = null;
 let playerColor = "";
 let cols = [];
 let rows = [];
@@ -15,6 +16,7 @@ let no_reset_votes = {};
 let localPlayerId = null;
 let claimed = {};
 let usernameInput = null;
+let bingoCountdownInterval = null;
 
 // Load saved player info from localStorage
 try {
@@ -116,6 +118,17 @@ socket.on('connect_error', (error) => {
 
 socket.on('disconnect', (reason) => {
     console.warn('[client] disconnected', reason);
+    // Clear any remote preview (current player may have disconnected)
+    if (previewSlot) {
+        const cell = document.getElementById(`cell-${previewSlot}`);
+        if (cell && !cell.classList.contains('locked')) {
+            cell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
+            cell.style.borderColor = '#333';
+            cell.style.borderStyle = 'solid';
+            cell.draggable = false;
+        }
+        previewSlot = null;
+    }
 });
 
 // Connection management
@@ -211,6 +224,23 @@ socket.on('slot_removed', (data) => {
 });
 
 socket.on('game_over', (data) => {
+    if (bingoCountdownInterval) {
+        clearInterval(bingoCountdownInterval);
+        bingoCountdownInterval = null;
+    }
+    const bingoModal = document.getElementById('bingoModal');
+    if (bingoModal) bingoModal.classList.remove('active');
+    // Clear any remote preview
+    if (previewSlot) {
+        const cell = document.getElementById(`cell-${previewSlot}`);
+        if (cell && !cell.classList.contains('locked')) {
+            cell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
+            cell.style.borderColor = '#333';
+            cell.style.borderStyle = 'solid';
+            cell.draggable = false;
+        }
+        previewSlot = null;
+    }
     showGameOverPopup(data.message);
 });
 
@@ -221,6 +251,17 @@ socket.on('kicked_all', (data) => {
     myPlayerId = null;
     localPlayerId = null;
     myName = null;
+    // Clear any remote preview
+    if (previewSlot) {
+        const cell = document.getElementById(`cell-${previewSlot}`);
+        if (cell && !cell.classList.contains('locked')) {
+            cell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
+            cell.style.borderColor = '#333';
+            cell.style.borderStyle = 'solid';
+            cell.draggable = false;
+        }
+        previewSlot = null;
+    }
     setLoginVisible(true);
 });
 
@@ -246,10 +287,61 @@ socket.on('turn_timeout', (data) => {
 });
 
 socket.on('player_moving', (data) => {
-    // Optional: visual feedback for other players' moves
+    // Clear any existing preview first
+    if (previewSlot) {
+        const oldCell = document.getElementById(`cell-${previewSlot}`);
+        if (oldCell && !oldCell.classList.contains('locked')) {
+            oldCell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
+            oldCell.style.borderColor = '#333';
+            oldCell.style.borderStyle = 'solid';
+            oldCell.draggable = false;
+        }
+        previewSlot = null;
+    }
+    
+    if (!data) {
+        // Explicit clear (e.g., player cancelled)
+        return;
+    }
+    
+    const slotId = data.slot_id;
+    if (!slotId) return;
+    
+    const cell = document.getElementById(`cell-${slotId}`);
+    if (!cell || cell.classList.contains('locked')) return;
+    
+    // Show preview with dashed border and reduced opacity
+    cell.innerHTML = `<img src="${data.img}" style="opacity:0.7; width:100%; height:100%; object-fit:cover;">`;
+    cell.style.borderColor = data.color || '#888';
+    cell.style.borderStyle = 'dashed';
+    cell.style.borderWidth = '4px';
+    previewSlot = slotId;
+});
+
+socket.on('bingo_detected', (data) => {
+    if (bingoCountdownInterval) clearInterval(bingoCountdownInterval);
+    const modal = document.getElementById('bingoModal');
+    const countdownEl = document.getElementById('bingoCountdown');
+    const textEl = document.getElementById('bingoText');
+    if (modal && countdownEl) {
+        textEl.textContent = 'มีคนทำบิงโกแล้ว! มีเวลา 10 วินาทีในการค้าน';
+        modal.classList.add('active');
+        let remaining = data.countdown || 10;
+        countdownEl.textContent = remaining;
+        bingoCountdownInterval = setInterval(() => {
+            remaining--;
+            countdownEl.textContent = remaining;
+            if (remaining <= 0) {
+                clearInterval(bingoCountdownInterval);
+                bingoCountdownInterval = null;
+                modal.classList.remove('active');
+            }
+        }, 1000);
+    }
 });
 
 function buildGrid(claimed) {
+    previewSlot = null; // Clear any remote preview when rebuilding grid
     const grid = document.getElementById('bingoGrid');
     grid.innerHTML = '';
     
@@ -453,8 +545,35 @@ function stopTimer() {
 }
 
 function updateGameState(data) {
-    turnPlayerId = data.order[data.turn] || null;
+    const newTurnPlayerId = data.order[data.turn] || null;
+    
+    // Clear remote preview if turn changed (preview belonged to previous player)
+    if (turnPlayerId !== newTurnPlayerId && previewSlot) {
+        const oldCell = document.getElementById(`cell-${previewSlot}`);
+        if (oldCell && !oldCell.classList.contains('locked')) {
+            oldCell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
+            oldCell.style.borderColor = '#333';
+            oldCell.style.borderStyle = 'solid';
+            oldCell.draggable = false;
+        }
+        previewSlot = null;
+    }
+    turnPlayerId = newTurnPlayerId;
     playerColor = data.players?.[myPlayerId]?.color || playerColor;
+    
+    // Clear local temp selection if it's no longer our turn
+    if (turnPlayerId !== myPlayerId && currentTemp) {
+        const slotId = currentTemp.slot_id;
+        const cell = document.getElementById(`cell-${slotId}`);
+        if (cell && !cell.classList.contains('locked')) {
+            cell.innerHTML = '<span style="color:#888; font-size:2rem; font-weight:bold;">?</span>';
+            cell.style.borderColor = '#333';
+            cell.draggable = false;
+        }
+        currentTemp = null;
+        const confirmBtn = document.getElementById('confirm');
+        if (confirmBtn) confirmBtn.disabled = true;
+    }
     
     // Update sidebar player list
     const playerListEl = document.getElementById('playerList');
@@ -517,13 +636,6 @@ function updateGameState(data) {
     // Only update timer if server provides turn_start_time
     if (turnPlayerId && data.turn_start_time) {
         startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
-    }
-
-    // Clear temporary selection if it's no longer our turn
-    if (turnPlayerId !== myPlayerId && currentTemp) {
-        currentTemp = null;
-        const confirmBtn = document.getElementById('confirm');
-        if (confirmBtn) confirmBtn.disabled = true;
     }
 }
 
@@ -701,6 +813,10 @@ function enterGame() {
 }
 
 function dismissBingoDispute() {
+    if (bingoCountdownInterval) {
+        clearInterval(bingoCountdownInterval);
+        bingoCountdownInterval = null;
+    }
     const modal = document.getElementById('bingoModal');
     if (modal) {
         modal.classList.remove('active');
