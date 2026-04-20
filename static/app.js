@@ -134,12 +134,14 @@ function buildGrid(claimed) {
     grid.innerHTML = '';
     
     console.log('[client] buildGrid - cols:', cols, 'rows:', rows);
+    
+    // Use default if no headers
+    const colHeaders = (cols && cols.length === 5) ? cols : ['X1','X2','X3','X4','X5'];
+    const rowHeaders = (rows && rows.length === 5) ? rows : ['Y1','Y2','Y3','Y4','Y5'];
 
     grid.appendChild(createHeaderCell('', true));
-    cols.forEach((col) => grid.appendChild(createHeaderCell(col, false)));
+    colHeaders.forEach((col) => grid.appendChild(createHeaderCell(col, false)));
 
-    const rowHeaders = (rows && rows.length === 5) ? rows : ['Y1','Y2','Y3','Y4','Y5'];
-    
     for (let r = 0; r < 5; r += 1) {
         grid.appendChild(createHeaderCell(rowHeaders[r], true, true));
         for (let c = 0; c < 5; c += 1) {

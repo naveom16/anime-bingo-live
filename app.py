@@ -252,10 +252,10 @@ def reset_bingo():
     game_state['row_headers'] = random.sample(TOPICS_SIDE, 5)
     game_state['claimed'] = {}
     game_state['current_turn_idx'] = 0
-    # Reset hearts for all players
+    # Reset hearts: ALL players get 3 hearts
     for session in session_manager.get_all_sessions().values():
         session['hearts'] = 3
-    logger.info('Bingo reset: new headers generated')
+    logger.info('Bingo reset: new headers generated, all players revived with 3 hearts')
 
 
 def check_win_condition():
