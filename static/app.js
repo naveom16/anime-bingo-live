@@ -74,6 +74,11 @@ socket.on('session_ready', (data) => {
     buildGrid(data.claimed);
     updateGameState(data.state);
     
+    // Initialize timer from server state
+    if (data.turn_start_time) {
+        startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
+    }
+    
     if (myIsFirst) {
         document.getElementById('kickAll').style.display = 'block';
     } else {
@@ -112,6 +117,8 @@ socket.on('slot_locked', (data) => {
         currentTemp = null;
         document.getElementById('confirm').disabled = true;
     }
+    // Request fresh state to sync everything including timer
+    socket.emit('request_full_state');
 });
 
 socket.on('dispute_update', (data) => {
@@ -124,17 +131,6 @@ socket.on('dispute_update', (data) => {
 
 socket.on('update_game_state', (data) => {
     updateGameState(data);
-});
-
-socket.on('slot_locked', (data) => {
-    const cell = document.getElementById(`cell-${data.slot_id}`);
-    if (cell) {
-        cell.classList.remove('drop-zone');
-        cell.classList.add('locked');
-        cell.innerHTML = `<img src="${data.img}">`;
-        cell.style.borderColor = data.color;
-        cell.style.borderStyle = 'solid';
-    }
 });
 
 socket.on('dispute_update', (data) => {
@@ -154,6 +150,8 @@ socket.on('slot_removed', (data) => {
         cell.style.boxShadow = '';
         cell.onclick = null;
     }
+    // Request fresh state after slot removed
+    socket.emit('request_full_state');
 });
 
 socket.on('reload_page', (data) => {
@@ -168,11 +166,24 @@ socket.on('full_state', (data) => {
     rows = data.row_headers || [];
     buildGrid(data.claimed);
     updateGameState(data.state);
+    
+    // Initialize timer from server state
+    if (data.turn_start_time) {
+        startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
+    }
 });
 
 socket.on('game_over', (data) => {
     console.log('[client] game_over:', data.message);
     showGameOverPopup(data.message);
+    // Request fresh state after game over (reset)
+    socket.emit('request_full_state');
+});
+
+socket.on('turn_timeout', (data) => {
+    console.log('[client] turn_timeout:', data);
+    // Request fresh state after timeout
+    socket.emit('request_full_state');
 });
 
 function showGameOverPopup(message) {
@@ -449,11 +460,9 @@ function updateGameState(data) {
     }
     document.getElementById('skip').disabled = (myPlayerId !== turnPlayerId);
 
-    // Start/update timer
+    // Only update timer if server provides turn_start_time
     if (turnPlayerId && data.turn_start_time) {
         startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
-    } else if (turnPlayerId) {
-        startTimer(Date.now(), data.turn_duration || 120);
     }
 }
 
@@ -525,8 +534,8 @@ function renderCharacterResults(characters, animeTitle) {
         return;
     }
     label.style.display = 'flex';
-    count.textContent = Math.min(characters.length, 20);
-    characters.slice(0, 20).forEach((item) => {
+    count.textContent = Math.min(characters.length, 50);
+    characters.slice(0, 50).forEach((item) => {
         const character = item.character;
         const card = document.createElement('div');
         card.className = 'item-card';

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -18,7 +18,18 @@
         </div>
     </div>
 
-<div class="app-shell">
+    <div class="app-shell">
+        <aside class="player-sidebar">
+            <div class="panel-card player-info-panel">
+                <h2>ผู้เล่น</h2>
+                <div id="playerList" class="player-list"></div>
+                <div id="timerDisplay" class="timer-display">
+                    <span class="timer-label">เวลา:</span>
+                    <span id="timerValue" class="timer-value">2:00</span>
+                </div>
+            </div>
+        </aside>
+
         <main class="game-area">
             <section class="player-status-container" id="players"></section>
             <div id="turnIndicator" class="turn-indicator">รอเชื่อมต่อ...</div>
@@ -39,17 +50,8 @@
         </main>
 
         <aside class="search-sidebar">
-            <div class="panel-card player-info-panel">
-                <h2>ผู้เล่น</h2>
-                <div id="playerList" class="player-list"></div>
-                <div id="timerDisplay" class="timer-display">
-                    <span class="timer-label">เวลา:</span>
-                    <span id="timerValue" class="timer-value">2:00</span>
-                </div>
-            </div>
-
             <div class="panel-card search-panel">
-                <h2>ค้นหาอนิเมะ &amp; ตัวละคร</h2>
+                <h2>ค้นหาตัวละคร</h2>
                 <input id="search" class="search-input" placeholder="?? พิมพ์ชื่ออนิเมะ..." oninput="onSearch()">
 
                 <div id="animeResultsLabel" class="result-label" style="display:none;">
@@ -67,33 +69,40 @@
         </aside>
     </div>
 
-<div id="confirmModal" class="modal">
-        <div class="modal-box panel-card">
-            <h2>ยืนยันข้อมูล</h2>
+    <div id="confirmModal" class="modal" onclick="if(event.target === this) closeConfirm()">
+        <div class="modal-box panel-card" style="max-width:320px;">
+            <div class="modal-header">
+                <h2>ยืนยันข้อมูล</h2>
+                <button class="modal-close" onclick="closeConfirm()">&times;</button>
+            </div>
             <div id="cImg"></div>
             <p id="cText"></p>
             <div class="action-row">
                 <button onclick="submitMove()" class="btn-confirm">ยืนยัน</button>
-                <button onclick="closeConfirm()" class="btn-cancel">ยกเลิก</button>
             </div>
         </div>
     </div>
 
-    <div id="charDetailModal" class="modal">
-        <div class="modal-box panel-card">
-            <h2>รายละเอียดตัวละคร</h2>
+    <div id="charDetailModal" class="modal" onclick="if(event.target === this) closeCharDetail()">
+        <div class="modal-box panel-card" style="max-width:320px;">
+            <div class="modal-header">
+                <h2>รายละเอียดตัวละคร</h2>
+                <button class="modal-close" onclick="closeCharDetail()">&times;</button>
+            </div>
             <div id="charDetailImg" style="width:100%;border-radius:12px;overflow:hidden;margin-bottom:12px;"></div>
             <div id="charDetailInfo" style="text-align:center;"></div>
             <div class="action-row">
-                <button onclick="closeCharDetail()" class="btn-cancel">ปิด</button>
                 <button onclick="disputeSelectedChar()" class="btn-dispute">ค้าน</button>
             </div>
         </div>
     </div>
 
-    <div id="gameOverModal" class="modal">
-        <div class="modal-box panel-card">
-            <h2>ผลเกม</h2>
+    <div id="gameOverModal" class="modal" onclick="if(event.target === this) this.classList.remove('active')">
+        <div class="modal-box panel-card" style="max-width:360px;">
+            <div class="modal-header">
+                <h2>ผลเกม</h2>
+                <button class="modal-close" onclick="document.getElementById('gameOverModal').classList.remove('active')">&times;</button>
+            </div>
             <p id="gameOverText" style="font-size:1.3rem;font-weight:700;color:#fff;text-align:center;"></p>
             <div class="action-row">
                 <button onclick="document.getElementById('gameOverModal').classList.remove('active')" class="btn-confirm">ตกลง</button>
@@ -104,4 +113,3 @@
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
-
