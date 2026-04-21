@@ -166,6 +166,11 @@ input {
     overflow: hidden;
 }
 
+.bingo-container.active-turn {
+    box-shadow: 0 0 30px 5px rgba(0, 255, 136, 0.4), inset 0 0 20px rgba(0, 255, 136, 0.1);
+    border: 2px solid rgba(0, 255, 136, 0.6);
+}
+
 .cell {
     width: 100%;
     min-height: 110px;
@@ -415,11 +420,11 @@ input {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 16px;
-    background: rgba(0,0,0,0.2);
-    border-radius: 16px;
-    margin-top: 10px;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(0,255,136,0.3);
 }
 
 .timer-label {
@@ -428,7 +433,7 @@ input {
 }
 
 .timer-value {
-    font-size: 1.8rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: #2ecc71;
     font-variant-numeric: tabular-nums;
@@ -594,12 +599,19 @@ input {
 }
 
 .bingo-countdown {
-    font-size: 4rem;
+    font-size: 5rem;
     font-weight: 700;
     color: #f1c40f;
     text-align: center;
     margin: 20px 0;
-    text-shadow: 0 0 20px rgba(241, 196, 15, 0.5);
+    text-shadow: 0 0 30px rgba(241, 196, 15, 0.8);
+    animation: countdownPulse 1s ease-in-out infinite;
+}
+
+@keyframes countdownPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.9; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
 .login-overlay {

@@ -2,6 +2,7 @@ import logging
 import random
 import time
 import threading
+from datetime import datetime
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from server.event_bus import EventBus
@@ -24,15 +25,32 @@ PLAYER_COLORS = [
 # Conflict topics to prevent overlapping
 TOPIC_CONFLICTS = {
     'เป็นฮีโร่': ['เป็นตัวร้าย'],
-    'เป็นนักเรียน': ['เป็นครู'],
+    'เป็นนักเรียน': ['เป็นครู', 'เป็นอาจารย์'],
     'เป็นทหาร': ['เป็นโจร'],
     'เป็นครึ่งมนุษย์': ['เป็นสัตว์'],
-    'มีพลังออร่ารอบตัว': ['มีรอยเรืองแสง'],
+    'ตัวสูง': ['ตัวเตี้ย'],
+    'ผอม': ['กล้าม'],
+    'ผมดำ': ['ผมขาว', 'ผมทอง', 'ผมชมพู', 'ผมเขียว', 'ผมม่วง', 'ผมฟ้า', 'ผมสีแดง'],
+    'อยู่ในโลกอนาคต': ['อยู่ในโลกปัจจุบัน', 'อยู่ในโลกแฟนตาซี', 'อยู่ในโลกยุคน้ำแข็ง'],
+    'พูดไม่ได้': ['พูดมาก'],
+    'เป็นเทพเจ้า': ['เป็นโจร', 'เป็นนักลอบสังหาร'],
+    'ถือดาบใหญ่': ['ใช้มีด', 'ใช้ปืน'],
+    'เด็ก': ['เป็นอาจารย์', 'เป็นหัวหน้าแก๊ง']
 }
 
-def get_non_conflicting_topics():
+def get_non_conflicting_topics(avoid_top=None, avoid_side=None):
     available_top = list(TOPICS_TOP)
     available_side = list(TOPICS_SIDE)
+    
+    # ลดโอกาสซ้ำโดยลบ headers ที่เคยใช้ล่าสุดออกก่อน (แต่ยังเหลือให้สุ่มได้)
+    if avoid_top:
+        for t in avoid_top[:3]:  # หลีกเลี่ยง 3 อันล่าสุด
+            if t in available_top and len(available_top) > 3:
+                available_top.remove(t)
+    if avoid_side:
+        for t in avoid_side[:3]:
+            if t in available_side and len(available_side) > 3:
+                available_side.remove(t)
     
     selected_top = []
     selected_side = []
@@ -41,7 +59,6 @@ def get_non_conflicting_topics():
         topic = random.choice(available_top)
         available_top.remove(topic)
         
-        # Check conflicts
         conflicts = TOPIC_CONFLICTS.get(topic, [])
         can_add = True
         for selected in selected_top:
@@ -56,7 +73,6 @@ def get_non_conflicting_topics():
         topic = random.choice(available_side)
         available_side.remove(topic)
         
-        # Check conflicts with already selected top
         can_add = True
         for selected in selected_top:
             if selected in TOPIC_CONFLICTS.get(topic, []):
@@ -68,25 +84,87 @@ def get_non_conflicting_topics():
     
     return selected_top, selected_side
 TOPICS_SIDE = [
-    'ผมดำ', 'ผมฟ้า', 'ผมม่วง', 'ผมเขียว', 'ผมชมพู',
-    'ตาสีแดง', 'ตาสีทอง', 'ตาสองสี', 'ตาปิดข้างเดียว',
+    'ผมดำ', 'ผมฟ้า', 'ผม���่วง', 'ผมเขียว', 'ผมชมพู', 'ผมขาว', 'ผมทอง', 'ผมสีแดง',
+    'ผมสองสี', 'ผมยาวถึงพื้น', 'ผมสั้นเกรียน',
+    'ตาสีแดง', 'ตาสีทอง', 'ตาสองสี', 'ตาปิดข้างเดียว', 'ดวงตาไร้แวว', 'ดวงตาเรืองแสง',
     'ใส่ผ้าปิดตา', 'ใส่หูฟัง', 'ใส่ถุงมือ', 'ใส่รองเท้าบูท',
-    'ใส่ชุดเกราะ', 'ใส่สูท', 'ใส่ชุดแฟนตาซี',
-    'ตัวสูง', 'ตัวเตี้ย', 'กล้าม', 'ผอม',
-    'มีเขา', 'มีปีก', 'มีหาง', 'มีเขี้ยว',
-    'มีรอยสัก', 'มีแผลเป็น', 'มีแผลเป็นตามตัว',
-    'ใส่แว่นกันแดด', 'ใส่หมวกคลุม', 'ใส่ฮู้ด',
-    'ถือดาบใหญ่', 'ถือปืนคู่', 'ถือคทา', 'ถือโล่',
-    'ใช้ธนู', 'ใช้มีด', 'ใช้เคียว',
-    'มีสัตว์เลี้ยง', 'มีมาสคอต', 'มีหุ่นยนต์คู่หู',
+    'ใส่ชุดเกราะ', 'ใส่สูท', 'ใส่ชุดแฟนตาซี', 'ใส่กิโมโน', 'ใส่ชุดจีน',
+    'ใส่ชุดโกธิค', 'ใส่เสื้อคลุมยาว', 'ใส่เกราะครึ่งตัว',
+    'ตัวสูง', 'ตัวเตี้ย', 'กล้าม', 'ผอม', 'ผิวสีแทน', 'ผิวซีด',
+    'มีเขา', 'มีปีก', 'มีหาง', 'มีเขี้ยว', 'มีหูสัตว์',
+    'มีรอยสัก', 'มีแผลเป็น', 'มีแผลเป็นตามตัว', 'มีผ้าพันแผลตามตัว',
+    'ใส่แว่น', 'ใส่หมวกคลุม', 'ใส่ฮู้ด', 'ใส่หน้ากาก', 
+    'ถือดาบใหญ่', 'ใช้ปืน', 'ถือคทา', 'ถือโล่',
+    'ใช้ธนู', 'ใช้มีด', 'ใช้เคียว', 'ใช้กรงเล็บ', 'ใช้โซ่', 'ใช้ขวานยักษ์',
+    'มีสัตว์เลี้ยง', 'มีมาสคอต', 'มีหุ่นยนต์คู่หู', 'มีวิญญาณตามติด',
     'ใส่เครื่องแบบทหาร', 'ใส่ชุดนักเรียนหญิง', 'ใส่ชุดนักเรียนชาย',
-    'ใส่ชุดแม่บ้าน', 'ใส่ชุดไอดอล',
-    'มีพลังออร่ารอบตัว',
-    'มีเสียงพูดแปลก', 'ไม่พูด', 'พูดน้อย',
-    'ยิ้มตลอด', 'หน้าตาย', 'ดูน่ากลัว',
+    'ใส่ชุดแม่บ้าน', 'ใส่ชุดไอดอล', 'ใส่ชุดนักบวช',
+    'มีพลังออร่ารอบตัว', 'ลอยตัวบนอากาศ', 'มีแขนขาจักรกล',
+    'มีอัญมณีตามตัว', 'ดวงตาเรืองแสง',
+    'ร่างกายมีไอเย็น', 'ร่างกายมีเปลวไฟ',
+    'มีเสียงพูดแปลก', 'พูดไม่ได้', 'พูดน้อย', 'พูดมาก',
+    'ชอบยิ้ม', 'หน้าตาย', 'ดูน่ากลัว','ง่วงนอน',
     'เด็ก', 'วัยรุ่น', 'ผู้ใหญ่',
-    'เป็นสัตว์', 'เป็นครึ่งมนุษย์',
+    'เป็นสัตว์', 'เป็นครึ่งมนุษย์', 'ขับหุ่นยนต์',
     'มีร่างแปลง', 'มีหลายร่าง'
+]
+TOPICS_TOP = [
+    'เป็นฮีโร่', 'เป็นตัวร้าย', 'เป็นแอนตี้ฮีโร่',
+    'เป็นทหาร', 'เป็นตำรวจ', 'เป็นสายลับ', 'เป็นบอดี้การ์ด',
+    'เป็นนักล่า', 'เป็นนักผจญภัย', 'เป็นผู้รอดชีวิต',
+    'เป็นราชา', 'เป็นเจ้าหญิง', 'เป็นขุนนาง', 'เป็นหัวหน้าแก๊ง',
+    'เป็นนักบวช', 'เป็นนักเวท', 'เป็นนักดาบ', 'เป็นนักธนู', 'เป็นนักหมัดมวย',
+    'เป็นนักพยากรณ์', 'เป็นช่างฝีมือ', 'เป็นเทพเจ้า', 'เป็นผู้พิทักษ์สุสาน',
+    'เป็นครู', 'เป็นนักเรียน', 'เป็นอาจารย์',
+    'เป็นนักวิจัย', 'เป็นหมอ', 'เป็นนักเล่นแร่แปรถาตุ',
+    'เป็นนักฆ่า', 'เป็นโจร', 'เป็นนักลอบสังหาร',
+    'อยู่ในโลกอนาคต', 'อยู่ในโลกแฟนตาซี', 'อยู่ในโลกปัจจุบัน',
+    'อยู่ในโลกใต้น้ำ', 'อยู่ในโลกยุค Steampunk', 'อยู่ในโลกเกาะลอยฟ้า', 'อยู่ในโลกยุคน้ำแข็ง',
+    'มีระบบเกม', 'เลเวลอัปได้', 'มีการใช้การ์ดต่อสู้', 'มีแรงก์ลำดับพลัง',
+    'เกิดใหม่', 'ย้อนเวลา', 'ข้ามโลก', 'ความทรงจำเสื่อม',
+    'มีสงคราม', 'มีการเมือง', 'มีองค์กรลับ', 'มีพันธสัญญาเลือด',
+    'มีโรงเรียนเวทมนตร์', 'มีโรงเรียนต่อสู้', 'มีการสำรวจดันเจี้ยน',
+    'ต่อสู้กับปีศาจ', 'ต่อสู้กับเอเลี่ยน', 'ต่อสู้กับมนุษย์', 'ต่อสู้กับเทพเจ้า',
+    'มีพลังมืด', 'มีพลังแสง', 'มีพลังน้ำ', 'มีพลังสายฟ้า', 'มีพลังลม', 'มีพลังดิน',
+    'ควบคุมเวลา', 'ควบคุมความคิด', 'ควบคุมแรงโน้มถ่วง',
+    'มีคำสาป', 'มีพรสวรรค์พิเศษ', 'มีเนตรพิเศษ',
+    'มีความลับ', 'มีอดีตมืดมน', 'ต้องปกปิดตัวตนจริง',
+    'มีเพื่อนร่วมทีม', 'ทำงานคนเดียว',
+    'มีการทรยศ', 'มีการแก้แค้น', 'การไถ่บาป',
+    'มีความรัก', 'มีดราม่า', 'มีความตลก',
+    'มีการแข่งขัน', 'มีทัวร์นาเมนต์',
+    'มีสัตว์อสูร', 'มีมังกร', 'มีซอมบี้',
+    'ต้องเอาชีวิตรอด', 'โลกกำลังล่มสลาย', 'เครื่องจักรครองเมือง',
+    'มีภารกิจหลัก', 'มีระบบกิลด์'
+]
+TOPICS_TOP = [
+    'เป็นฮีโร่', 'เป็นตัวร้าย', 'เป็นแอนตี้ฮีโร่',
+    'เป็นทหาร', 'เป็นตำรวจ', 'เป็นสายลับ',
+    'เป็นนักล่า', 'เป็นนักผจญภัย',
+    'เป็นราชา', 'เป็นเจ้าหญิง', 'เป็นขุนนาง',
+    'เป็นนักเวท', 'เป็นนักดาบ', 'เป็นนักธนู',
+    'เป็นนักพยากรณ์', 'เป็นช่างฝีมือ', 'เป็นเทพเจ้า',
+    'เป็นครู', 'เป็นนักเรียน', 'เป็นอาจารย์',
+    'เป็นนักวิจัย', 'เป็นหมอ', 'เป็นนักเล่นแร่แปรถาตุ',
+    'เป็นนักฆ่า', 'เป็นโจร', 'เป็นคลดีย์',
+    'อยู่ในโลกอนาคต', 'อยู่ในโลกแฟนตาซี', 'อยู่ในโลกปัจจุบัน',
+    'อยู่ในโลกใต้น้ำ', 'อยู่ในโลกยุค Steampunk',
+    'มีระบบเกม', 'เลเวลอัปได้', 'มีการใช้การ์ดต่อสู้',
+    'เกิดใหม่', 'ย้อนเวลา', 'ข้ามโลก',
+    'มีสงคราม', 'มีการเมือง', 'มีองค์กรลับ',
+    'มีโรงเรียนเวทมนตร์', 'มีโรงเรียนต่อสู้', 'มีการสำรวจดันเจี้ยน',
+    'ต่อสู้กับปีศาจ', 'ต่อสู้กับเอเลี่ยน', 'ต่อสู้กับมนุษย์',
+    'มีพลังมืด', 'มีพลังแสง', 'มีพลังน้ำ', 'มีพลังสายฟ้า',
+    'ควบคุมเวลา', 'ควบคุมความคิด',
+    'มีคำสาป', 'มีพรสวรรค์พิเศษ',
+    'มีความลับ', 'มีอดีตมืดมน',
+    'มีเพื่อนร่วมทีม', 'ทำงานคนเดียว',
+    'มีการทรยศ', 'มีการแก้แค้น',
+    'มีความรัก', 'มีดราม่า',
+    'มีการแข่งขัน', 'มีทัวร์นาเมนต์',
+    'มีสัตว์อสูร', 'มีมังกร',
+    'ต้องเอาชีวิตรอด', 'โลกกำลังล่มสลาย',
+    'มีภารกิจหลัก', 'มีระบบกิลด์'
 ]
 TOPICS_TOP = [
     'เป็นฮีโร่', 'เป็นตัวร้าย', 'เป็นแอนตี้ฮีโร่',
@@ -126,6 +204,7 @@ game_state = {
     'current_turn_idx': 0,
     'turn_start_time': None,
     'turn_duration': 120,
+    'header_history': [],  # เก็บ headers ที่เคยใช้แต่ละรอบ
 }
 
 TURN_TIMER = None
@@ -154,6 +233,7 @@ def on_disconnect():
         logger.info('All players offline - game cleared')
     elif not remaining:
         # No players at all - full reset
+        game_state['header_history'] = []  # เคลียร์ history
         game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics()
         game_state['claimed'] = {}
         game_state['player_order'] = []
@@ -260,6 +340,7 @@ def handle_confirm(data):
         'player_id': session['player_id'],
         'color': session['color'],
         'disputes': [],
+        'timestamp': datetime.now().timestamp(),
     }
 
     logger.info('Slot claimed: %s by %s', slot_id, session['player_id'])
@@ -327,31 +408,39 @@ def handle_kick_all():
     global TURN_TIMER
     sid = request.sid
     session = session_manager.get_by_sid(sid)
+    logger.info('DEBUG kick_all: sid=%s, session=%s', sid, session)
+    
     if not session:
-        return
-    if not session.get('is_first', False):
+        logger.info('DEBUG kick_all: no session')
         return
     
+    # ตัดทุกคนออกจาก session manager
     all_sessions = session_manager.get_all_sessions()
+    logger.info('DEBUG kick_all: all_sessions=%s', all_sessions)
+    
     for player_id, s in all_sessions.items():
-        if player_id != session['player_id']:
+        try:
+            session_manager.remove_session(player_id)
             if s.get('sid'):
                 socketio.disconnect(s['sid'])
+            logger.info('DEBUG kick_all: removed %s', player_id)
+        except Exception as e:
+            logger.info('DEBUG kick_all: remove error %s', e)
     
+    # รีเซ็ตทุกอย่าง
+    game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics()
     game_state['claimed'] = {}
-    game_state['player_order'] = [session['player_id']]
+    game_state['player_order'] = []
     game_state['current_turn_idx'] = 0
     game_state['turn_start_time'] = None
-    session['hearts'] = 3
+    game_state['header_history'] = []
     
     if TURN_TIMER:
         TURN_TIMER.cancel()
         TURN_TIMER = None
     
-    emit('kicked_all', {'message': 'ไล่ทุกคนออกแล้ว! เริ่มเกมใหม่'}, broadcast=True)
-    broadcast_state()
-    start_turn_timer()
-    logger.info('First player kicked everyone else')
+    emit('kicked_all', {'message': 'รีเซ็ตเกม! ทุกคนต้องเข้าใหม่'}, broadcast=True)
+    logger.info('Kick all executed - full reset')
 
 @socketio.on('request_reset')
 def handle_request_reset():
@@ -555,12 +644,17 @@ def normalize_turn_index():
 
 
 def get_state_payload():
+    current_pid = None
+    if game_state['player_order'] and game_state['current_turn_idx'] < len(game_state['player_order']):
+        current_pid = game_state['player_order'][game_state['current_turn_idx']]
+    
     return {
         'players': session_manager.get_all_sessions(),
         'order': game_state['player_order'],
         'turn': game_state['current_turn_idx'],
         'turn_start_time': game_state.get('turn_start_time'),
         'turn_duration': game_state.get('turn_duration', 120),
+        'current_player_id': current_pid,
     }
 
 
@@ -572,7 +666,21 @@ def broadcast_state():
 
 def reset_bingo(message='ไม่เอาอะรีดีกว่า ;DDDDDDDD'):
     global game_state, TURN_TIMER
-    game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics()
+    
+    # เก็บ headers ปัจจุบันเข้า history (เก็บแค่ 5 รอบล่าสุด)
+    old_headers = (game_state['col_headers'], game_state['row_headers'])
+    game_state['header_history'].append(old_headers)
+    if len(game_state['header_history']) > 5:
+        game_state['header_history'].pop(0)
+    
+    # หลีกเลี่ยง headers จาก 2 รอบล่าสุด
+    avoid_top = []
+    avoid_side = []
+    for hist_top, hist_side in game_state['header_history'][-2:]:
+        avoid_top.extend(hist_top)
+        avoid_side.extend(hist_side)
+    
+    game_state['col_headers'], game_state['row_headers'] = get_non_conflicting_topics(avoid_top, avoid_side)
     game_state['claimed'] = {}
     game_state['current_turn_idx'] = 0
     game_state['turn_start_time'] = None
@@ -597,11 +705,13 @@ def reset_bingo(message='ไม่เอาอะรีดีกว่า ;DDDDD
         game_state['current_turn_idx'] = 0
         logger.info('Bingo reset: player order shuffled')
     
+    start_turn_timer()
     logger.info('Bingo reset: new headers generated, all players revived with 3 hearts')
     return message
 
 
 def check_win_condition():
+    logger.info('DEBUG: check_win_condition called. claimed=%s', list(game_state['claimed'].keys()))
     # Check if any player has completed a bingo (5 in a row/col/diagonal)
     bingo_lines = []
     
@@ -619,9 +729,9 @@ def check_win_condition():
     
     # Diagonals
     diag1 = [f"{i}-{i}" for i in range(5)]
-    diag2 = [f"{i}-{4-i}" for i in range(5)]
     if all(s in game_state['claimed'] for s in diag1):
         bingo_lines.append(diag1)
+    diag2 = [f"{i}-{4-i}" for i in range(5)]
     if all(s in game_state['claimed'] for s in diag2):
         bingo_lines.append(diag2)
     
@@ -629,14 +739,20 @@ def check_win_condition():
     if bingo_lines:
         logger.info('Bingo detected! Lines: %s', bingo_lines)
         
-        # Find who placed the last character (the one that completed bingo)
-        last_slot = list(game_state['claimed'].keys())[-1]
-        last_player_id = game_state['claimed'][last_slot]['player_id']
+        # Find last player who placed in any bingo line
+        # Get all slots in bingo lines, find the one with latest timestamp
+        all_bingo_slots = set()
+        for line in bingo_lines:
+            all_bingo_slots.update(line)
+        
+        last_bingo_slot = max(all_bingo_slots, 
+            key=lambda s: game_state['claimed'][s].get('timestamp', 0))
+        winner_id = game_state['claimed'][last_bingo_slot]['player_id']
         
         # Emit bingo detected event with countdown
         emit('bingo_detected', {
             'lines': bingo_lines,
-            'last_player_id': last_player_id,
+            'last_player_id': winner_id,
             'countdown': 10,
         }, broadcast=True)
         
@@ -650,11 +766,15 @@ def check_win_condition():
         game_state['bingo_timer'] = bingo_timer
 
 
-def finalize_win(bingo_lines):
+def finalize_win(bingo_lines, winner_id=None):
     game_state.pop('bingo_timer', None)
     
-    last_slot = list(game_state['claimed'].keys())[-1]
-    winner_id = game_state['claimed'][last_slot]['player_id']
+    if winner_id is None:
+        all_slots = set()
+        for line in bingo_lines:
+            all_slots.update(line)
+        last_slot = max(all_slots, key=lambda s: game_state['claimed'][s].get('timestamp', 0))
+        winner_id = game_state['claimed'][last_slot]['player_id']
     
     session = session_manager.get_by_player_id(winner_id)
     
@@ -672,15 +792,35 @@ def finalize_win(bingo_lines):
 
 
 def check_tie_condition():
-    # Check if there's a tie (e.g., multiple players with same score)
-    # For now, simple check: if all players have 0 hearts
     active_sessions = [s for s in session_manager.get_all_sessions().values() if s['connected']]
-    if active_sessions and all(s['hearts'] <= 0 for s in active_sessions):
-        msg = reset_bingo('ว่าหาผลสรุปไม่ได้ ;D')
+    if not active_sessions:
+        logger.info('DEBUG: check_tie_condition - no active sessions')
+        return
+    
+    logger.info('DEBUG: check_tie_condition - active: %s, hearts: %s', 
+                len(active_sessions), [s['hearts'] for s in active_sessions])
+    
+    # เช็คว่ามีผู้เล่นที่มีหัวใจเหลือแค่คนเดียวหรือไม่
+    players_with_hearts = [s for s in active_sessions if s['hearts'] > 0]
+    players_without_hearts = [s for s in active_sessions if s['hearts'] <= 0]
+    
+    # ถ้ามีผู้เล่นที่มีหัวใจเหลือแค่คนเดียว และมีคนอื่นที่หมดหัวใจแล้ว
+    if len(players_with_hearts) == 1 and len(players_without_hearts) >= 1:
+        winner = players_with_hearts[0]
+        winner['points'] = winner.get('points', 0) + 1
+        winner_msg = f'ผู้ชนะคือ {winner["name"]}! (เหลือคนเดียว)'
+        msg = reset_bingo(winner_msg)
+        emit('game_over', {'message': winner_msg, 'winner_id': winner['player_id']}, broadcast=True)
+        broadcast_state()
+        start_turn_timer()
+        logger.info('Last survivor wins: %s', winner['player_id'])
+    elif all(s['hearts'] <= 0 for s in active_sessions):
+        # AUTO RESET เมื่อทุกคนหมดหัวใจ
+        msg = reset_bingo('ทุกคนหมดหัวใจ! เริ่มใหม่')
         emit('game_over', {'message': msg}, broadcast=True)
         broadcast_state()
         start_turn_timer()
-        logger.info('Bingo reset due to tie')
+        logger.info('Bingo auto reset: all hearts empty')
 
 
 @event_bus.subscribe('player_removed')

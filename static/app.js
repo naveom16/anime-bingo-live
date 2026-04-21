@@ -17,6 +17,7 @@ let localPlayerId = null;
 let claimed = {};
 let usernameInput = null;
 let bingoCountdownInterval = null;
+let currentPlayerIdGlobal = null;  // ผู้เล่นที่กำลังเล่นอยู่ (สำหรับ highlight)
 
 // Load saved player info from localStorage
 try {
@@ -167,7 +168,7 @@ socket.on('session_ready', (data) => {
     claimed = data.claimed || {};
 
     updateGameState(data.state);
-    buildGrid(claimed);
+    buildGrid(claimed, currentPlayerIdGlobal);
     setLoginVisible(false);
 
     if (data.reconnect) {
@@ -181,7 +182,10 @@ socket.on('session_ready', (data) => {
     }
 });
 
-socket.on('update_game_state', updateGameState);
+socket.on('update_game_state', (data) => {
+    updateGameState(data);
+    buildGrid(claimed, currentPlayerIdGlobal);
+});
 
 socket.on('slot_locked', (data) => {
     claimed[data.slot_id] = {
@@ -221,7 +225,7 @@ socket.on('dispute_update', (data) => {
 
 socket.on('slot_removed', (data) => {
     delete claimed[data.slot_id];
-    buildGrid(claimed);
+    buildGrid(claimed, currentPlayerIdGlobal);
 });
 
 socket.on('game_over', (data) => {
@@ -249,7 +253,8 @@ socket.on('game_over', (data) => {
 });
 
 socket.on('kicked_all', (data) => {
-    showGameOverPopup(data.message);
+    console.log('[DEBUG] kicked_all received:', data);
+    alert(data.message);
     localStorage.removeItem('animeBingoPlayerId');
     localStorage.removeItem('animeBingoPlayerName');
     myPlayerId = null;
@@ -289,7 +294,7 @@ socket.on('full_state', (data) => {
     } else {
         stopTimer();
     }
-    buildGrid(claimed);
+    buildGrid(claimed, currentPlayerIdGlobal);
 });
 
 socket.on('turn_timeout', (data) => {
@@ -330,7 +335,25 @@ socket.on('player_moving', (data) => {
     previewSlot = slotId;
 });
 
+// เสียง countdown สำหรับ bingo
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playCountdownBeep() {
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = 880;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+}
+
 socket.on('bingo_detected', (data) => {
+    console.log('[DEBUG] bingo_detected received:', data);
     if (bingoCountdownInterval) clearInterval(bingoCountdownInterval);
     const modal = document.getElementById('bingoModal');
     const countdownEl = document.getElementById('bingoCountdown');
@@ -339,21 +362,30 @@ socket.on('bingo_detected', (data) => {
         textEl.textContent = 'มีคนทำบิงโกแล้ว! มีเวลา 10 วินาทีในการค้าน';
         modal.classList.add('active');
         let remaining = data.countdown || 10;
-        countdownEl.textContent = remaining;
-        bingoCountdownInterval = setInterval(() => {
-            remaining--;
+        
+        const countDown = () => {
             countdownEl.textContent = remaining;
+            playCountdownBeep();
+            countdownEl.style.animation = 'none';
+            countdownEl.offsetHeight; // trigger reflow
+            countdownEl.style.animation = 'countdownPulse 1s ease-in-out infinite';
+            
             if (remaining <= 0) {
                 clearInterval(bingoCountdownInterval);
                 bingoCountdownInterval = null;
                 modal.classList.remove('active');
-                location.reload(); // Auto refresh page after countdown ends
+                location.reload();
+                return;
             }
-        }, 1000);
+            remaining--;
+        };
+        
+        countDown();
+        bingoCountdownInterval = setInterval(countDown, 1000);
     }
 });
 
-function buildGrid(claimed) {
+function buildGrid(claimed, currentPlayerId = null) {
     previewSlot = null; // Clear any remote preview when rebuilding grid
     const grid = document.getElementById('bingoGrid');
     grid.innerHTML = '';
@@ -374,6 +406,12 @@ function buildGrid(claimed) {
             const cell = document.createElement('div');
             cell.id = `cell-${slotId}`;
             cell.className = 'cell';
+            
+            // Highlight สีเขียวถ้าช่องนี้เป็นของ current player
+            if (currentPlayerId && claimed?.[slotId]?.player_id === currentPlayerId) {
+                cell.style.boxShadow = '0 0 15px 3px #00ff88, inset 0 0 10px rgba(0,255,136,0.2)';
+            }
+            
             if (claimed?.[slotId]) {
                 setLockedCell(cell, claimed[slotId], slotId);
             } else {
@@ -564,6 +602,19 @@ function stopTimer() {
 function updateGameState(data) {
     claimed = data.claimed || claimed;
     
+    // อัปเดต current player id สำหรับ highlight
+    currentPlayerIdGlobal = data.current_player_id || data.order?.[data.turn] || null;
+    
+    // เพิ่ม/ลบ highlight รอบ bingo-container
+    const bingoContainer = document.getElementById('bingoGrid');
+    if (bingoContainer) {
+        if (currentPlayerIdGlobal === myPlayerId) {
+            bingoContainer.classList.add('active-turn');
+        } else {
+            bingoContainer.classList.remove('active-turn');
+        }
+    }
+    
     const newTurnPlayerId = data.order[data.turn] || null;
     
     // Clear remote preview if turn changed (preview belonged to previous player)
@@ -657,7 +708,7 @@ function updateGameState(data) {
         startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
     }
 
-    buildGrid(claimed);
+    buildGrid(claimed, currentPlayerIdGlobal);
 }
 
 let searchTimeout = null;
