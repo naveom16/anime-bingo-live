@@ -651,25 +651,21 @@ def check_win_condition():
 
 
 def finalize_win(bingo_lines):
-    # Remove bingo timer reference
     game_state.pop('bingo_timer', None)
     
-    # Find winner by points
-    all_sessions = session_manager.get_all_sessions()
-    if not all_sessions:
-        return
-        
-    max_points = max([s.get('points', 0) for s in all_sessions.values()])
-    winners = [s for s in all_sessions.values() if s.get('points', 0) == max_points]
+    last_slot = list(game_state['claimed'].keys())[-1]
+    winner_id = game_state['claimed'][last_slot]['player_id']
     
-    if len(winners) > 1:
-        winner_msg = 'ว่าหาผลสรุปไม่ได้ ;D'
+    session = session_manager.get_by_player_id(winner_id)
+    
+    if session:
+        session['points'] = session.get('points', 0) + 1
+        winner_msg = f'ผู้ชนะคือ {session["name"]}! (Bingo สำเร็จ)'
     else:
-        winners[0]['points'] = winners[0].get('points', 0) + 1
-        winner_msg = f'ผู้ชนะคือ {winners[0]["name"]}! (+1 แต้ม)'
+        winner_msg = 'ไม่พบผู้ชนะ'
     
     msg = reset_bingo(winner_msg)
-    emit('game_over', {'message': winner_msg, 'lines': bingo_lines}, broadcast=True)
+    emit('game_over', {'message': winner_msg, 'lines': bingo_lines, 'winner_id': winner_id}, broadcast=True)
     broadcast_state()
     start_turn_timer()
     logger.info('Bingo finalized: %s', winner_msg)

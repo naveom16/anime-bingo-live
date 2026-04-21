@@ -134,6 +134,7 @@ socket.on('disconnect', (reason) => {
 // Connection management
 socket.on('connect', () => {
     console.log('[client] connected');
+    socket.emit('request_full_state');
     // Only auto-join if we have stored credentials
     if (localPlayerId || myName) {
         const payload = { name: myName || 'Player' };
@@ -191,7 +192,7 @@ socket.on('slot_locked', (data) => {
         color: data.color,
         disputes: []
     };
-    buildGrid(claimed);
+    socket.emit('request_full_state');
 });
 
 socket.on('dispute_update', (data) => {
@@ -293,6 +294,8 @@ socket.on('full_state', (data) => {
 
 socket.on('turn_timeout', (data) => {
     console.log('[client] turn_timeout', data);
+
+    socket.emit('request_full_state');
 });
 
 socket.on('player_moving', (data) => {
@@ -541,6 +544,10 @@ function updateTimerDisplay() {
             timerEl.style.animation = 'none';
         }
     }
+
+    if (remaining <= 0) {
+        socket.emit('request_full_state');
+    }
 }
 
 function stopTimer() {
@@ -555,6 +562,8 @@ function stopTimer() {
 }
 
 function updateGameState(data) {
+    claimed = data.claimed || claimed;
+    
     const newTurnPlayerId = data.order[data.turn] || null;
     
     // Clear remote preview if turn changed (preview belonged to previous player)
@@ -647,6 +656,8 @@ function updateGameState(data) {
     if (turnPlayerId && data.turn_start_time) {
         startTimer(data.turn_start_time * 1000, data.turn_duration || 120);
     }
+
+    buildGrid(claimed);
 }
 
 let searchTimeout = null;
@@ -788,6 +799,7 @@ function submitMove() {
         return;
     }
     socket.emit('confirm_final_claim', currentTemp);
+    socket.emit('request_full_state');
     closeConfirm();
 }
 
